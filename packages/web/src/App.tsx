@@ -1,16 +1,33 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { Route, Routes } from 'react-router-dom';
 import type { ApiTask } from '@vesper/shared';
 import { api } from './lib/api.js';
 import { RepoManager } from './repos/RepoForm.js';
 import { RunHistory } from './tasks/RunHistory.js';
+import { TaskDetail } from './tasks/TaskDetail.js';
 import { TaskList } from './tasks/TaskList.js';
 import { TaskModal } from './tasks/TaskModal.js';
 
 // `?new` opens the create form straight away, per Testing's captures.
 const openOnLoad = new URLSearchParams(window.location.search).has('new');
 
+/**
+ * The task list stays at `/`, the only route it ever had. `/tasks/:id`
+ * (and its tabs) is the one new address this card adds — everything else
+ * here, including the create/edit and repo-manager overlays, is unchanged.
+ */
 export function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<TaskListPage />} />
+      <Route path="/tasks/:id" element={<TaskDetail />} />
+      <Route path="/tasks/:id/:tab" element={<TaskDetail />} />
+    </Routes>
+  );
+}
+
+function TaskListPage() {
   const tasks = useQuery({ queryKey: ['tasks'], queryFn: api.tasks });
   const [editing, setEditing] = useState<ApiTask | null | undefined>(openOnLoad ? null : undefined);
   const [managingRepos, setManagingRepos] = useState(false);
