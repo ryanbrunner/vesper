@@ -97,7 +97,13 @@ export function runTask(db: Db, taskId: string, trigger: RunTrigger, query: Quer
     let result: Extract<SDKMessage, { type: 'result' }> | null = null;
     try {
       for await (const message of query({ prompt: singleMessage(task.prompt), options })) {
-        if (message.type === 'assistant' || message.type === 'user') transcript.push(message);
+        if (message.type === 'assistant' || message.type === 'user') {
+          transcript.push(message);
+          // Flushed here, not just once in finish(): a run detail view
+          // polling a run still in flight should see its transcript grow,
+          // not just appear once the run ends.
+          setRunStatus(db, runId, { transcriptJson: transcript });
+        }
         if (message.type === 'result') result = message;
         if (message.type === 'system' && message.subtype === 'init' && message.permissionMode !== PERMISSION_MODE) {
           abortController.abort();

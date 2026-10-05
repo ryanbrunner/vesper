@@ -161,6 +161,39 @@ test('an error thrown mid-stream fails the run', async () => {
   assert.match(latest?.errorMessage ?? '', /ECONNRESET/);
 });
 
+/** A fake SDK that yields an assistant message after `init`, then hangs until abort. */
+function hangingAfterAssistant(assistantMsg: SDKMessage): QueryFn {
+  return (({ options }: { prompt: string | AsyncIterable<SDKUserMessage>; options: Options }) => {
+    async function* gen(): AsyncGenerator<SDKMessage> {
+      const signal = options.abortController!.signal;
+      const aborted = new Promise<never>((_, reject) => {
+        if (signal.aborted) reject(new Error('aborted by user'));
+        else signal.addEventListener('abort', () => reject(new Error('aborted by user')));
+      });
+      yield init;
+      yield assistantMsg;
+      await aborted;
+    }
+    return gen();
+  }) as unknown as QueryFn;
+}
+
+test('a run in flight has its transcript readable before it finishes', async () => {
+  const { db, task } = setUp();
+  const assistantMsg = { type: 'assistant', message: { role: 'assistant', content: 'hi' } } as unknown as SDKMessage;
+  const { run, done } = runTask(db, task.id, 'manual', hangingAfterAssistant(assistantMsg));
+
+  // Lets the message loop actually reach the assistant message and flush it
+  // before this test reads the row back.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(getRun(db, run.id)?.transcript, [assistantMsg]);
+  assert.equal(getRun(db, run.id)?.status, 'running');
+
+  assert.equal(cancelRun(run.id), true);
+  await done;
+  assert.equal(getRun(db, run.id)?.status, 'cancelled');
+});
+
 test('cancelRun stops an in-flight run', async () => {
   const { db, task } = setUp();
   const { run, done } = runTask(db, task.id, 'manual', hanging());
