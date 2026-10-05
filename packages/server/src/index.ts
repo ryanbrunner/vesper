@@ -24,7 +24,7 @@ export function createApp() {
   const app = new Hono();
   app.route('/api/repos', repoRoutes(db));
   app.route('/api/tasks', taskRoutes(db));
-  app.route('/api/runs', runRoutes());
+  app.route('/api/runs', runRoutes(db));
   app.get('/healthz', (c) => c.json({ ok: true }));
 
   // In production the built frontend is served from the same origin and port.

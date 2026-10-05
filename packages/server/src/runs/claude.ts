@@ -89,10 +89,21 @@ export function runTask(db: Db, taskId: string, trigger: RunTrigger, query: Quer
     canUseTool: (toolName, input) => Promise.resolve(decideToolUse(toolName, input)),
   };
 
+  // Everything else the SDK emits alongside these (status, progress, hooks,
+  // ...) is noise the run detail view has no use for — see schema.ts.
+  const transcript: SDKMessage[] = [];
+
   const done = (async () => {
     let result: Extract<SDKMessage, { type: 'result' }> | null = null;
     try {
       for await (const message of query({ prompt: singleMessage(task.prompt), options })) {
+        if (message.type === 'assistant' || message.type === 'user') {
+          transcript.push(message);
+          // Flushed here, not just once in finish(): a run detail view
+          // polling a run still in flight should see its transcript grow,
+          // not just appear once the run ends.
+          setRunStatus(db, runId, { transcriptJson: transcript });
+        }
         if (message.type === 'result') result = message;
         if (message.type === 'system' && message.subtype === 'init' && message.permissionMode !== PERMISSION_MODE) {
           abortController.abort();
@@ -104,32 +115,32 @@ export function runTask(db: Db, taskId: string, trigger: RunTrigger, query: Quer
       }
     } catch (err) {
       if (err instanceof AutoModeUnavailable) {
-        finish(db, runId, 'failed', err.message, result);
+        finish(db, runId, 'failed', err.message, result, transcript);
         return;
       }
       if (cancelled) {
-        finish(db, runId, 'cancelled', null, result);
+        finish(db, runId, 'cancelled', null, result, transcript);
         return;
       }
-      finish(db, runId, 'failed', String(err).slice(0, 500), result);
+      finish(db, runId, 'failed', String(err).slice(0, 500), result, transcript);
       return;
     } finally {
       runRegistry.unregister(runId);
     }
 
     if (cancelled) {
-      finish(db, runId, 'cancelled', null, result);
+      finish(db, runId, 'cancelled', null, result, transcript);
       return;
     }
     if (!result) {
-      finish(db, runId, 'failed', 'stream ended with no result message', null);
+      finish(db, runId, 'failed', 'stream ended with no result message', null, transcript);
       return;
     }
     if (result.subtype !== 'success') {
-      finish(db, runId, 'failed', `run ended: ${result.subtype}`, result);
+      finish(db, runId, 'failed', `run ended: ${result.subtype}`, result, transcript);
       return;
     }
-    finish(db, runId, 'succeeded', null, result);
+    finish(db, runId, 'succeeded', null, result, transcript);
   })();
 
   return { run, done };
@@ -142,6 +153,7 @@ function finish(
   status: 'succeeded' | 'failed' | 'cancelled',
   errorMessage: string | null,
   result: Extract<SDKMessage, { type: 'result' }> | null,
+  transcript: SDKMessage[],
 ): void {
   setRunStatus(db, runId, {
     status,
@@ -152,6 +164,7 @@ function finish(
     usageJson: (result?.usage as Record<string, unknown>) ?? null,
     modelUsageJson: (result?.modelUsage as Record<string, unknown>) ?? null,
     numTurns: result?.num_turns ?? null,
+    transcriptJson: transcript,
   });
 }
 
