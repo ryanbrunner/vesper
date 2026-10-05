@@ -30,13 +30,13 @@ export function TaskList({ tasks, onEdit }: { tasks: ApiTask[]; onEdit: (task: A
       {tasks.map((task) => (
         <li
           key={task.id}
-          className={`flex items-center justify-between gap-4 rounded-md border-l-4 bg-panel px-4 py-3 ${
+          className={`flex flex-col gap-3 rounded-md border-l-4 bg-panel px-4 py-3 sm:flex-row sm:items-center sm:justify-between ${
             task.enabled ? 'border-l-enabled-mark' : 'border-l-paused-mark'
           }`}
         >
           <div className="flex min-w-0 flex-col gap-1">
-            <div className="flex items-center gap-2">
-              <span className="truncate font-medium text-text">{task.name}</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-medium text-text">{task.name}</span>
               <span className="rounded-full border border-edge px-2 py-0.5 font-mono text-xs text-muted">
                 {task.repoName}
               </span>
@@ -44,7 +44,7 @@ export function TaskList({ tasks, onEdit }: { tasks: ApiTask[]; onEdit: (task: A
             <p className="font-mono text-xs text-muted">{describeCron(task.schedule) ?? task.schedule}</p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <span
               className={`rounded-full px-2 py-0.5 font-mono text-xs uppercase tracking-wide ${
                 task.enabled ? 'bg-enabled-fill text-enabled-mark' : 'bg-paused-fill text-paused-mark'
