@@ -7,6 +7,7 @@ import {
   deleteTask,
   getApiTask,
   getLatestRun,
+  getToolUsage,
   listRuns,
   listTasks,
   setTaskEnabled,
@@ -18,6 +19,14 @@ export function taskRoutes(db: Db) {
   const routes = new Hono();
 
   routes.get('/', (c) => c.json(listTasks(db)));
+
+  // The task detail view's one call for the task itself — the list shape
+  // already carries everything this needs, just for a single id.
+  routes.get('/:id', (c) => {
+    const found = getApiTask(db, c.req.param('id'));
+    if (!found) return c.json({ error: 'not found' }, 404);
+    return c.json(found);
+  });
 
   routes.post('/', async (c) => {
     const parsed = CreateTaskBody.safeParse(await c.req.json());
@@ -85,6 +94,10 @@ export function taskRoutes(db: Db) {
 
   // Newest first, per run.ts's own doc comment on the row this reads.
   routes.get('/:id/runs', (c) => c.json(listRuns(db, c.req.param('id'))));
+
+  // The Tools tab's one call: tool_use calls across this task's runs,
+  // tallied server-side rather than making the client count transcripts.
+  routes.get('/:id/tool-usage', (c) => c.json(getToolUsage(db, c.req.param('id'))));
 
   return routes;
 }

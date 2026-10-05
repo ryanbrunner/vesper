@@ -7,6 +7,7 @@ import {
   type ApiRun,
   type ApiRunDetail,
   type ApiTask,
+  type ApiToolUsage,
   type CreateTaskBody,
   type RunStatus,
   type RunTrigger,
@@ -249,6 +250,51 @@ export function listRuns(db: Db, taskId: string): ApiRun[] {
 export function getRun(db: Db, id: string): ApiRunDetail | undefined {
   const row = db.select().from(run).where(eq(run.id, id)).get();
   return row ? toApiRunDetail(row) : undefined;
+}
+
+/** A transcript message's own tool_use blocks — read defensively, since the SDK's message shape isn't ours to narrow. */
+function toolUseNames(message: unknown): string[] {
+  const content = (message as { message?: { content?: unknown } }).message?.content;
+  if (!Array.isArray(content)) return [];
+  return content
+    .filter((block: { type?: string; name?: unknown }) => block.type === 'tool_use' && typeof block.name === 'string')
+    .map((block: { name: string }) => block.name);
+}
+
+/** An MCP tool call's own server, e.g. `slack` out of `mcp__slack__send_message`; anything else is a local/built-in tool. */
+function toolBucket(name: string): string {
+  return /^mcp__(.+?)__/.exec(name)?.[1] ?? 'Other';
+}
+
+/**
+ * How often a task's runs have called each tool, tallied by walking every
+ * run's transcriptJson rather than sending transcripts to the client to
+ * count themselves. Sorted most-called first.
+ */
+export function getToolUsage(db: Db, taskId: string): ApiToolUsage[] {
+  const rows = db.select({ transcriptJson: run.transcriptJson }).from(run).where(eq(run.taskId, taskId)).all();
+
+  const tally = new Map<string, { callCount: number; runCount: number }>();
+  for (const { transcriptJson } of rows) {
+    const messages = (transcriptJson as unknown[] | null) ?? [];
+    const bucketsInRun = new Set<string>();
+    for (const message of messages) {
+      for (const toolName of toolUseNames(message)) {
+        const bucket = toolBucket(toolName);
+        const entry = tally.get(bucket) ?? { callCount: 0, runCount: 0 };
+        entry.callCount += 1;
+        tally.set(bucket, entry);
+        bucketsInRun.add(bucket);
+      }
+    }
+    for (const bucket of bucketsInRun) {
+      tally.get(bucket)!.runCount += 1;
+    }
+  }
+
+  return [...tally.entries()]
+    .map(([name, counts]) => ({ name, ...counts }))
+    .sort((a, b) => b.callCount - a.callCount);
 }
 
 /**
