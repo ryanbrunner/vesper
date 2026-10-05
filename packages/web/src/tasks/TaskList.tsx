@@ -81,6 +81,10 @@ const STATUS_COLOR: Record<ApiRun['status'], string> = {
   succeeded: 'text-enabled-mark',
   failed: 'text-red-400',
   cancelled: 'text-muted',
+  // Never actually shown here: getLatestRun excludes skipped runs so one
+  // written mid-run can't hide the run it was skipped alongside. Kept so
+  // this map stays exhaustive over ApiRun['status'].
+  skipped: 'text-muted',
 };
 
 /** Polled while a run is in flight, so the badge clears on its own once one finishes. */
