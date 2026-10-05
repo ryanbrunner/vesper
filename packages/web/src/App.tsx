@@ -3,18 +3,23 @@ import { useQuery } from '@tanstack/react-query';
 import type { ApiTask } from '@vesper/shared';
 import { api } from './lib/api.js';
 import { RepoManager } from './repos/RepoForm.js';
+import { RunDetail } from './tasks/RunDetail.js';
 import { RunHistory } from './tasks/RunHistory.js';
 import { TaskList } from './tasks/TaskList.js';
 import { TaskModal } from './tasks/TaskModal.js';
 
 // `?new` opens the create form straight away, per Testing's captures.
 const openOnLoad = new URLSearchParams(window.location.search).has('new');
+// `?run=<id>` opens that run's detail view directly, same reason: a capturable URL that
+// doesn't need navigating to through RunHistory first.
+const runIdOnLoad = new URLSearchParams(window.location.search).get('run');
 
 export function App() {
   const tasks = useQuery({ queryKey: ['tasks'], queryFn: api.tasks });
   const [editing, setEditing] = useState<ApiTask | null | undefined>(openOnLoad ? null : undefined);
   const [managingRepos, setManagingRepos] = useState(false);
   const [historyTask, setHistoryTask] = useState<ApiTask | null>(null);
+  const [openRunId, setOpenRunId] = useState<string | null>(runIdOnLoad);
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
@@ -45,6 +50,7 @@ export function App() {
       {editing !== undefined && <TaskModal task={editing} onClose={() => setEditing(undefined)} />}
       {managingRepos && <RepoManager onClose={() => setManagingRepos(false)} />}
       {historyTask && <RunHistory task={historyTask} onClose={() => setHistoryTask(null)} />}
+      {openRunId && <RunDetail runId={openRunId} onClose={() => setOpenRunId(null)} />}
     </div>
   );
 }
