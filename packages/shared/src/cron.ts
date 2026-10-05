@@ -1,4 +1,4 @@
-import parser from 'cron-parser';
+import { CronExpressionParser } from 'cron-parser';
 import cronstrue from 'cronstrue';
 
 /**
@@ -8,7 +8,7 @@ import cronstrue from 'cronstrue';
  */
 export function isValidCron(expression: string): boolean {
   try {
-    parser.parseExpression(expression);
+    CronExpressionParser.parse(expression);
     return true;
   } catch {
     return false;

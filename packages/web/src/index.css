@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+/*
+ * Vesper's own palette: near-black ink with panels a shade lighter, in the
+ * mockups' dark theme. Reeve wires up the same --font-sans/--font-mono split
+ * in its own index.css, so that's copied rather than re-decided; the colors
+ * below are Vesper's, not Reeve's run-state tokens, since this app has no
+ * runs yet.
+ */
+@theme {
+  --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', 'Noto Sans', Arial, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+
+  --color-ink: #0b0d12;
+  --color-panel: #13161d;
+  --color-panel-hover: #181c25;
+  --color-edge: #242938;
+  --color-muted: #868da0;
+  --color-text: #e7eaf0;
+
+  /* A task's enabled/paused state: a left accent border plus a small badge.
+     Just two tones, not Reeve's full run-state scheme, since a task here has
+     only two states. */
+  --color-enabled-mark: #4ade80;
+  --color-enabled-fill: #22c55e1f;
+  --color-paused-mark: #8b93a6;
+  --color-paused-fill: #8b93a61a;
+}
+
+html, body, #root { height: 100%; }
+body { background: var(--color-ink); color: var(--color-text); }

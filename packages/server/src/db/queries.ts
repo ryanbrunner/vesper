@@ -10,8 +10,10 @@ export class ValidationError extends Error {}
 /** Thrown when a repo cannot be deleted because a task still references it. */
 export class RepoInUseError extends Error {}
 
+const repoColumns = { id: repo.id, name: repo.name, path: repo.path };
+
 export function listRepos(db: Db): ApiRepo[] {
-  return db.select().from(repo).orderBy(asc(repo.name)).all();
+  return db.select(repoColumns).from(repo).orderBy(asc(repo.name)).all();
 }
 
 /**
@@ -29,7 +31,11 @@ export function createRepo(db: Db, values: { name: string; path: string }): ApiR
   if (!stat.isDirectory()) {
     throw new ValidationError(`${values.path} is not a directory`);
   }
-  return db.insert(repo).values({ ...values, id: crypto.randomUUID() }).returning().get();
+  return db
+    .insert(repo)
+    .values({ ...values, id: crypto.randomUUID() })
+    .returning(repoColumns)
+    .get();
 }
 
 /**
