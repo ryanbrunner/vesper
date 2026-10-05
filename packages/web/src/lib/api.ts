@@ -1,4 +1,13 @@
-import type { ApiRepo, ApiRun, ApiRunDetail, ApiTask, CreateRepoBody, CreateTaskBody, UpdateTaskBody } from '@vesper/shared';
+import type {
+  ApiRepo,
+  ApiRun,
+  ApiRunDetail,
+  ApiTask,
+  ApiToolUsage,
+  CreateRepoBody,
+  CreateTaskBody,
+  UpdateTaskBody,
+} from '@vesper/shared';
 
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -27,6 +36,7 @@ export const api = {
 
   // --- tasks ---
   tasks: () => fetch('/api/tasks').then(json<ApiTask[]>),
+  task: (id: string) => fetch(`/api/tasks/${id}`).then(json<ApiTask>),
   createTask: (body: CreateTaskBody) => post('/api/tasks', body).then(json<ApiTask>),
   updateTask: (id: string, body: UpdateTaskBody) => patch(`/api/tasks/${id}`, body).then(json<ApiTask>),
   pauseTask: (id: string) => post(`/api/tasks/${id}/pause`, {}).then(json<ApiTask>),
@@ -35,7 +45,9 @@ export const api = {
   runTask: (id: string) => post(`/api/tasks/${id}/run`, {}).then(json<ApiRun>),
   latestRun: (id: string) => fetch(`/api/tasks/${id}/latest-run`).then(json<ApiRun | null>),
   runsForTask: (id: string) => fetch(`/api/tasks/${id}/runs`).then(json<ApiRun[]>),
+  toolUsage: (id: string) => fetch(`/api/tasks/${id}/tool-usage`).then(json<ApiToolUsage[]>),
 
   // --- runs ---
   run: (id: string) => fetch(`/api/runs/${id}`).then(json<ApiRunDetail>),
+  cancelRun: (id: string) => post(`/api/runs/${id}/cancel`, {}).then(json<{ ok: true }>),
 };
