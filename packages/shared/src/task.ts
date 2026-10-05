@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 /**
  * A scheduled AI task: a prompt, a repo to run it in, and a cron schedule.
- * Nothing executes one yet — this is its definition, not a run of it.
+ * This is its definition, not a run of it — see ApiRun for that.
  */
 export interface ApiTask {
   id: string;
