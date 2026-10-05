@@ -34,3 +34,27 @@ export function describeCron(expression: string): string | null {
     return null;
   }
 }
+
+/**
+ * Whether a string is a zone name `Intl` recognises, e.g. `America/Chicago`.
+ * Checked this way, rather than handed straight to `cron-parser`, because a
+ * bad zone there only surfaces once a schedule is actually due.
+ */
+export function isValidTimeZone(tz: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The most recent instant this schedule was due at or before `now` — the
+ * boundary the scheduler compares against the last time it looked, to tell
+ * whether one has been crossed since. `tz` is the machine's own local zone
+ * when omitted or null, same as `cron-parser` itself defaults.
+ */
+export function lastDueAt(expression: string, now: Date, tz?: string | null): Date {
+  return CronExpressionParser.parse(expression, { currentDate: now, tz: tz ?? undefined }).prev().toDate();
+}

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { ApiTask } from '@vesper/shared';
 import { api } from './lib/api.js';
 import { RepoManager } from './repos/RepoForm.js';
+import { RunHistory } from './tasks/RunHistory.js';
 import { TaskList } from './tasks/TaskList.js';
 import { TaskModal } from './tasks/TaskModal.js';
 
@@ -13,6 +14,7 @@ export function App() {
   const tasks = useQuery({ queryKey: ['tasks'], queryFn: api.tasks });
   const [editing, setEditing] = useState<ApiTask | null | undefined>(openOnLoad ? null : undefined);
   const [managingRepos, setManagingRepos] = useState(false);
+  const [historyTask, setHistoryTask] = useState<ApiTask | null>(null);
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
@@ -38,10 +40,11 @@ export function App() {
 
       {tasks.isLoading && <p className="text-sm text-muted">Loading…</p>}
       {tasks.isError && <p className="text-sm text-red-400">{tasks.error.message}</p>}
-      {tasks.data && <TaskList tasks={tasks.data} onEdit={setEditing} />}
+      {tasks.data && <TaskList tasks={tasks.data} onEdit={setEditing} onHistory={setHistoryTask} />}
 
       {editing !== undefined && <TaskModal task={editing} onClose={() => setEditing(undefined)} />}
       {managingRepos && <RepoManager onClose={() => setManagingRepos(false)} />}
+      {historyTask && <RunHistory task={historyTask} onClose={() => setHistoryTask(null)} />}
     </div>
   );
 }

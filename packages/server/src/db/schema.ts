@@ -21,8 +21,11 @@ export const task = sqliteTable('task', {
   // itself first, so the refusal carries a readable `detail` instead of a bare
   // SQLite constraint error.
   repoId: text('repo_id').notNull().references(() => repo.id, { onDelete: 'restrict' }),
-  // A 5-field cron expression, evaluated in server-local time.
+  // A 5-field cron expression, evaluated in `timezone` when set, otherwise
+  // the machine's own local time.
   schedule: text('schedule').notNull(),
+  // An IANA zone name. Null to run `schedule` in the machine's own local time.
+  timezone: text('timezone'),
   // Both nullable with no default: null means "the CLI's own default", so
   // every task that predates these columns keeps today's behaviour untouched.
   model: text('model', { enum: ['sonnet', 'opus', 'haiku', 'fable'] }),
@@ -39,7 +42,7 @@ export const run = sqliteTable('run', {
   // with it rather than refusing the delete.
   taskId: text('task_id').notNull().references(() => task.id, { onDelete: 'cascade' }),
   trigger: text('trigger', { enum: ['manual', 'scheduled'] }).notNull(),
-  status: text('status', { enum: ['running', 'succeeded', 'failed', 'cancelled'] }).notNull(),
+  status: text('status', { enum: ['running', 'succeeded', 'failed', 'cancelled', 'skipped'] }).notNull(),
   startedAt: timestamp('started_at').notNull().default(sql`(unixepoch() * 1000)`),
   finishedAt: timestamp('finished_at'),
   // Claude's own closing text, when the run got that far.
@@ -54,4 +57,8 @@ export const run = sqliteTable('run', {
   modelUsageJson: text('model_usage_json', { mode: 'json' }),
   numTurns: integer('num_turns'),
   errorMessage: text('error_message'),
+  // The run's own `assistant`/`user` SDK messages, in order — everything else
+  // the SDK emits (status, progress, hooks, ...) is noise the run detail view
+  // has no use for, so claude.ts filters it out before this is ever set.
+  transcriptJson: text('transcript_json', { mode: 'json' }),
 });

@@ -1,0 +1,1 @@
+ALTER TABLE `run` ADD `transcript_json` text;

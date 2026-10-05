@@ -12,8 +12,10 @@ export interface ApiTask {
   repoId: string;
   /** The repo's own name, carried inline so the list view needs one round trip. */
   repoName: string;
-  /** A 5-field cron expression, evaluated in server-local time. */
+  /** A 5-field cron expression, evaluated in `timezone` when set, otherwise the machine's own local time. */
   schedule: string;
+  /** An IANA zone name, e.g. `America/Chicago`. Null to run `schedule` in the machine's own local time. */
+  timezone: string | null;
   /** Null means the CLI's own default — auto mode, no model pinned. */
   model: TaskModel | null;
   effort: EffortLevel | null;
@@ -27,6 +29,7 @@ export const CreateTaskBody = z.object({
   prompt: z.string().min(1, 'prompt is required'),
   repoId: z.string().min(1, 'repoId is required'),
   schedule: z.string().min(1, 'schedule is required'),
+  timezone: z.string().optional(),
   model: z.enum(TASK_MODELS).nullable().optional(),
   effort: z.enum(EFFORT_LEVELS).nullable().optional(),
 });
@@ -37,6 +40,7 @@ export const UpdateTaskBody = z.object({
   prompt: z.string().min(1).optional(),
   repoId: z.string().min(1).optional(),
   schedule: z.string().min(1).optional(),
+  timezone: z.string().optional(),
   model: z.enum(TASK_MODELS).nullable().optional(),
   effort: z.enum(EFFORT_LEVELS).nullable().optional(),
 });

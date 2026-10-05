@@ -1,9 +1,11 @@
 import { statSync } from 'node:fs';
-import { asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, ne } from 'drizzle-orm';
 import {
   isValidCron,
+  isValidTimeZone,
   type ApiRepo,
   type ApiRun,
+  type ApiRunDetail,
   type ApiTask,
   type CreateTaskBody,
   type RunStatus,
@@ -67,6 +69,7 @@ const taskColumns = {
   repoId: task.repoId,
   repoName: repo.name,
   schedule: task.schedule,
+  timezone: task.timezone,
   model: task.model,
   effort: task.effort,
   enabled: task.enabled,
@@ -98,20 +101,29 @@ export function getTask(db: Db, id: string) {
   return db.select().from(task).where(eq(task.id, id)).get();
 }
 
-function assertValidTask(db: Db, { repoId, schedule }: { repoId: string; schedule: string }) {
+function assertValidTask(db: Db, { repoId, schedule, timezone }: { repoId: string; schedule: string; timezone: string | null }) {
   if (!isValidCron(schedule)) {
     throw new ValidationError(`"${schedule}" is not a valid cron expression`);
+  }
+  if (timezone !== null && !isValidTimeZone(timezone)) {
+    throw new ValidationError(`"${timezone}" is not a recognised time zone`);
   }
   if (!db.select().from(repo).where(eq(repo.id, repoId)).get()) {
     throw new ValidationError(`no repo with id ${repoId}`);
   }
 }
 
+/** A blank override is the same as none: both mean "the machine's own local time". */
+function normalizeTimezone(timezone: string | undefined): string | null {
+  return timezone?.trim() ? timezone.trim() : null;
+}
+
 export function createTask(db: Db, body: CreateTaskBody) {
-  assertValidTask(db, body);
+  const timezone = normalizeTimezone(body.timezone);
+  assertValidTask(db, { ...body, timezone });
   return db
     .insert(task)
-    .values({ ...body, id: crypto.randomUUID() })
+    .values({ ...body, timezone, id: crypto.randomUUID() })
     .returning()
     .get();
 }
@@ -119,13 +131,15 @@ export function createTask(db: Db, body: CreateTaskBody) {
 export function updateTask(db: Db, id: string, patch: UpdateTaskBody) {
   const current = getTask(db, id);
   if (!current) return undefined;
+  const timezone = patch.timezone === undefined ? current.timezone : normalizeTimezone(patch.timezone);
   assertValidTask(db, {
     repoId: patch.repoId ?? current.repoId,
     schedule: patch.schedule ?? current.schedule,
+    timezone,
   });
   return db
     .update(task)
-    .set({ ...patch, updatedAt: new Date() })
+    .set({ ...patch, timezone, updatedAt: new Date() })
     .where(eq(task.id, id))
     .returning()
     .get();
@@ -147,13 +161,18 @@ export function getTaskWithRepo(db: Db, id: string) {
 }
 
 function toApiRun(row: typeof run.$inferSelect): ApiRun {
+  const { transcriptJson, usageJson, modelUsageJson, startedAt, finishedAt, ...rest } = row;
   return {
-    ...row,
-    startedAt: row.startedAt.getTime(),
-    finishedAt: row.finishedAt?.getTime() ?? null,
-    usage: row.usageJson,
-    modelUsage: row.modelUsageJson,
+    ...rest,
+    startedAt: startedAt.getTime(),
+    finishedAt: finishedAt?.getTime() ?? null,
+    usage: usageJson,
+    modelUsage: modelUsageJson,
   };
+}
+
+function toApiRunDetail(row: typeof run.$inferSelect): ApiRunDetail {
+  return { ...toApiRun(row), transcript: (row.transcriptJson as unknown[]) ?? null };
 }
 
 export function insertRun(
@@ -161,6 +180,31 @@ export function insertRun(
   values: { id: string; taskId: string; trigger: RunTrigger; startedAt: Date },
 ): ApiRun {
   return toApiRun(db.insert(run).values({ ...values, status: 'running' }).returning().get());
+}
+
+/**
+ * A run that never reaches `runTask` at all: the scheduler found the task's
+ * previous run still `running` when this one came due, so it records the
+ * skip — `startedAt` and `finishedAt` both now — instead of starting a
+ * second one alongside it.
+ */
+export function recordSkippedRun(db: Db, values: { id: string; taskId: string; reason: string }): ApiRun {
+  const now = new Date();
+  return toApiRun(
+    db
+      .insert(run)
+      .values({
+        id: values.id,
+        taskId: values.taskId,
+        trigger: 'scheduled',
+        status: 'skipped',
+        startedAt: now,
+        finishedAt: now,
+        errorMessage: values.reason,
+      })
+      .returning()
+      .get(),
+  );
 }
 
 export interface RunStatusPatch {
@@ -172,6 +216,7 @@ export interface RunStatusPatch {
   modelUsageJson?: unknown | null;
   numTurns?: number | null;
   errorMessage?: string | null;
+  transcriptJson?: unknown | null;
 }
 
 /** The row a run's lifecycle is folded into as it goes, and once at the end. */
@@ -180,10 +225,32 @@ export function setRunStatus(db: Db, id: string, patch: RunStatusPatch): ApiRun 
   return updated ? toApiRun(updated) : undefined;
 }
 
-/** The most recent run of a task, for the list view's status badge. Null when it has never run. */
+/**
+ * The most recent run of a task, for the list view's status badge and for
+ * the scheduler's own overlap check. `skipped` rows are excluded: one
+ * written while a real run is still in flight would otherwise look like the
+ * latest run and hide it, clearing the "Running…" state the badge and the
+ * overlap check both depend on. Null when nothing else has ever run.
+ */
 export function getLatestRun(db: Db, taskId: string): ApiRun | null {
-  const row = db.select().from(run).where(eq(run.taskId, taskId)).orderBy(desc(run.startedAt)).get();
+  const row = db
+    .select()
+    .from(run)
+    .where(and(eq(run.taskId, taskId), ne(run.status, 'skipped')))
+    .orderBy(desc(run.startedAt))
+    .get();
   return row ? toApiRun(row) : null;
+}
+
+/** A task's full run history, newest first — the transcript isn't needed here, only in getRun. */
+export function listRuns(db: Db, taskId: string): ApiRun[] {
+  return db.select().from(run).where(eq(run.taskId, taskId)).orderBy(desc(run.startedAt)).all().map(toApiRun);
+}
+
+/** A single run with its transcript, for the run detail view. */
+export function getRun(db: Db, id: string): ApiRunDetail | undefined {
+  const row = db.select().from(run).where(eq(run.id, id)).get();
+  return row ? toApiRunDetail(row) : undefined;
 }
 
 /**

@@ -12,6 +12,7 @@ import { repoRoutes } from './routes/repos.js';
 import { runRoutes } from './routes/runs.js';
 import { taskRoutes } from './routes/tasks.js';
 import { listModels } from './runs/models.js';
+import { startScheduler } from './runs/scheduler.js';
 
 /**
  * Pure: opens the database, runs migrations and mounts routes, nothing else.
@@ -26,7 +27,7 @@ export function createApp() {
   const app = new Hono();
   app.route('/api/repos', repoRoutes(db));
   app.route('/api/tasks', taskRoutes(db));
-  app.route('/api/runs', runRoutes());
+  app.route('/api/runs', runRoutes(db));
   app.route('/api/models', modelRoutes());
   app.get('/healthz', (c) => c.json({ ok: true }));
 
@@ -53,6 +54,10 @@ export function startServer({ port = config.port }: { port?: number } = {}): Pro
       // this point has no process behind it any more — the server that was
       // watching it is the one just starting back up.
       failOrphanedRuns(db);
+      // Started after the reap above, and not a moment before: the
+      // scheduler's own overlap check reads a task's latest run, and every
+      // task would otherwise look mid-run until the reap got to it.
+      startScheduler(db);
       // Warmed now so the first model picker, and the first run of a pinned
       // task, do not wait on the CLI's own handshake.
       void listModels();
