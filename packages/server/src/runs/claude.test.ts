@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { CanUseTool, Options, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import { createRepo, createTask, getLatestRun } from '../db/queries.js';
+import { createRepo, createTask, getLatestRun, getRun } from '../db/queries.js';
 import { testDb, testRepoDir } from '../routes/test-helpers.js';
 import { cancelRun, runTask, type QueryFn } from './claude.js';
 
@@ -76,6 +76,19 @@ test('a successful run records the result, cost and usage', async () => {
   assert.equal(latest?.numTurns, 3);
   assert.equal(latest?.errorMessage, null);
   assert.ok(latest?.finishedAt);
+});
+
+test('a run keeps the assistant/user messages for its transcript, and drops everything else', async () => {
+  const { db, task } = setUp();
+  const assistantMsg = { type: 'assistant', message: { role: 'assistant', content: 'hi' } } as unknown as SDKMessage;
+  const userMsg = { type: 'user', message: { role: 'user', content: 'tool result' } } as unknown as SDKMessage;
+  const result = { type: 'result', subtype: 'success', result: 'done' } as unknown as SDKMessage;
+
+  const { run, done } = runTask(db, task.id, 'manual', scripted([init, assistantMsg, userMsg, result]));
+  await done;
+
+  const detail = getRun(db, run.id);
+  assert.deepEqual(detail?.transcript, [assistantMsg, userMsg]);
 });
 
 test('a run is scoped to the repo and starts in auto mode, denying every escalated tool', async () => {

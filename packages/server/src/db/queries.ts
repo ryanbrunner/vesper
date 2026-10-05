@@ -4,6 +4,7 @@ import {
   isValidCron,
   type ApiRepo,
   type ApiRun,
+  type ApiRunDetail,
   type ApiTask,
   type CreateTaskBody,
   type RunStatus,
@@ -145,13 +146,18 @@ export function getTaskWithRepo(db: Db, id: string) {
 }
 
 function toApiRun(row: typeof run.$inferSelect): ApiRun {
+  const { transcriptJson, usageJson, modelUsageJson, startedAt, finishedAt, ...rest } = row;
   return {
-    ...row,
-    startedAt: row.startedAt.getTime(),
-    finishedAt: row.finishedAt?.getTime() ?? null,
-    usage: row.usageJson,
-    modelUsage: row.modelUsageJson,
+    ...rest,
+    startedAt: startedAt.getTime(),
+    finishedAt: finishedAt?.getTime() ?? null,
+    usage: usageJson,
+    modelUsage: modelUsageJson,
   };
+}
+
+function toApiRunDetail(row: typeof run.$inferSelect): ApiRunDetail {
+  return { ...toApiRun(row), transcript: (row.transcriptJson as unknown[]) ?? null };
 }
 
 export function insertRun(
@@ -170,6 +176,7 @@ export interface RunStatusPatch {
   modelUsageJson?: unknown | null;
   numTurns?: number | null;
   errorMessage?: string | null;
+  transcriptJson?: unknown | null;
 }
 
 /** The row a run's lifecycle is folded into as it goes, and once at the end. */
@@ -182,6 +189,17 @@ export function setRunStatus(db: Db, id: string, patch: RunStatusPatch): ApiRun 
 export function getLatestRun(db: Db, taskId: string): ApiRun | null {
   const row = db.select().from(run).where(eq(run.taskId, taskId)).orderBy(desc(run.startedAt)).get();
   return row ? toApiRun(row) : null;
+}
+
+/** A task's full run history, newest first — the transcript isn't needed here, only in getRun. */
+export function listRuns(db: Db, taskId: string): ApiRun[] {
+  return db.select().from(run).where(eq(run.taskId, taskId)).orderBy(desc(run.startedAt)).all().map(toApiRun);
+}
+
+/** A single run with its transcript, for the run detail view. */
+export function getRun(db: Db, id: string): ApiRunDetail | undefined {
+  const row = db.select().from(run).where(eq(run.id, id)).get();
+  return row ? toApiRunDetail(row) : undefined;
 }
 
 /**
