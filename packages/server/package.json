@@ -10,10 +10,12 @@
     "dev": "tsx watch src/main.ts",
     "start": "tsx src/main.ts",
     "db:seed": "tsx src/db/seed.ts",
+    "test": "tsx --test 'src/**/*.test.ts'",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.281",
     "@hono/node-server": "^2.1.1",
     "@vesper/shared": "*",
     "better-sqlite3": "^13.0.3",

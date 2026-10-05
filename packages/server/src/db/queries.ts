@@ -1,8 +1,17 @@
 import { statSync } from 'node:fs';
 import { asc, desc, eq } from 'drizzle-orm';
-import { isValidCron, type ApiRepo, type ApiTask, type CreateTaskBody, type UpdateTaskBody } from '@vesper/shared';
+import {
+  isValidCron,
+  type ApiRepo,
+  type ApiRun,
+  type ApiTask,
+  type CreateTaskBody,
+  type RunStatus,
+  type RunTrigger,
+  type UpdateTaskBody,
+} from '@vesper/shared';
 import type { Db } from './client.js';
-import { repo, task } from './schema.js';
+import { repo, run, task } from './schema.js';
 
 /** Thrown for anything a 400 should report back with a readable `detail`. */
 export class ValidationError extends Error {}
@@ -127,4 +136,62 @@ export function setTaskEnabled(db: Db, id: string, enabled: boolean) {
 
 export function deleteTask(db: Db, id: string): void {
   db.delete(task).where(eq(task.id, id)).run();
+}
+
+/** A task with the repo it runs in, for whatever starts a run of it. */
+export function getTaskWithRepo(db: Db, id: string) {
+  const row = db.select().from(task).innerJoin(repo, eq(task.repoId, repo.id)).where(eq(task.id, id)).get();
+  return row ? { ...row.task, repo: row.repo } : undefined;
+}
+
+function toApiRun(row: typeof run.$inferSelect): ApiRun {
+  return {
+    ...row,
+    startedAt: row.startedAt.getTime(),
+    finishedAt: row.finishedAt?.getTime() ?? null,
+    usage: row.usageJson,
+    modelUsage: row.modelUsageJson,
+  };
+}
+
+export function insertRun(
+  db: Db,
+  values: { id: string; taskId: string; trigger: RunTrigger; startedAt: Date },
+): ApiRun {
+  return toApiRun(db.insert(run).values({ ...values, status: 'running' }).returning().get());
+}
+
+export interface RunStatusPatch {
+  status?: RunStatus;
+  finishedAt?: Date | null;
+  resultText?: string | null;
+  totalCostUsd?: number | null;
+  usageJson?: unknown | null;
+  modelUsageJson?: unknown | null;
+  numTurns?: number | null;
+  errorMessage?: string | null;
+}
+
+/** The row a run's lifecycle is folded into as it goes, and once at the end. */
+export function setRunStatus(db: Db, id: string, patch: RunStatusPatch): ApiRun | undefined {
+  const updated = db.update(run).set(patch).where(eq(run.id, id)).returning().get();
+  return updated ? toApiRun(updated) : undefined;
+}
+
+/** The most recent run of a task, for the list view's status badge. Null when it has never run. */
+export function getLatestRun(db: Db, taskId: string): ApiRun | null {
+  const row = db.select().from(run).where(eq(run.taskId, taskId)).orderBy(desc(run.startedAt)).get();
+  return row ? toApiRun(row) : null;
+}
+
+/**
+ * Catches whatever a crash or a restart left behind: a run whose process is
+ * gone but whose row still says `running`, which nothing would otherwise ever
+ * change again. Called once, at startup.
+ */
+export function failOrphanedRuns(db: Db): void {
+  db.update(run)
+    .set({ status: 'failed', errorMessage: 'server restarted mid-run', finishedAt: new Date() })
+    .where(eq(run.status, 'running'))
+    .run();
 }

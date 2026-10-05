@@ -1,11 +1,12 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { describeCron, type ApiTask } from '@vesper/shared';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { describeCron, type ApiRun, type ApiTask } from '@vesper/shared';
 import { api } from '../lib/api.js';
 
 /**
  * One row per task, in the mockup's resting-state shape: name, schedule as
- * plain language, a repo pill, an enabled/paused badge, and actions. No
- * run-history strip, tool pills or tokens — nothing here runs yet.
+ * plain language, a repo pill, an enabled/paused badge, and actions. Below
+ * that, at most the latest run's own status — a full history, with its
+ * transcript and tokens, is the run dashboard card's job, not this one's.
  */
 export function TaskList({ tasks, onEdit }: { tasks: ApiTask[]; onEdit: (task: ApiTask) => void }) {
   const qc = useQueryClient();
@@ -42,6 +43,7 @@ export function TaskList({ tasks, onEdit }: { tasks: ApiTask[]; onEdit: (task: A
               </span>
             </div>
             <p className="font-mono text-xs text-muted">{describeCron(task.schedule) ?? task.schedule}</p>
+            <LatestRun taskId={task.id} />
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
@@ -52,6 +54,7 @@ export function TaskList({ tasks, onEdit }: { tasks: ApiTask[]; onEdit: (task: A
             >
               {task.enabled ? 'Enabled' : 'Paused'}
             </span>
+            <RunNowButton task={task} />
             <button className="text-sm text-muted hover:text-text" onClick={() => onEdit(task)}>
               Edit
             </button>
@@ -70,5 +73,44 @@ export function TaskList({ tasks, onEdit }: { tasks: ApiTask[]; onEdit: (task: A
         </li>
       ))}
     </ul>
+  );
+}
+
+const STATUS_COLOR: Record<ApiRun['status'], string> = {
+  running: 'text-sky-400',
+  succeeded: 'text-enabled-mark',
+  failed: 'text-red-400',
+  cancelled: 'text-muted',
+};
+
+/** Polled while a run is in flight, so the badge clears on its own once one finishes. */
+function LatestRun({ taskId }: { taskId: string }) {
+  const latest = useQuery({
+    queryKey: ['latestRun', taskId],
+    queryFn: () => api.latestRun(taskId),
+    refetchInterval: (query) => (query.state.data?.status === 'running' ? 2000 : false),
+  });
+  if (!latest.data) return null;
+  return <p className={`font-mono text-xs ${STATUS_COLOR[latest.data.status]}`}>{latest.data.status}</p>;
+}
+
+function RunNowButton({ task }: { task: ApiTask }) {
+  const qc = useQueryClient();
+  const latest = useQuery({ queryKey: ['latestRun', task.id], queryFn: () => api.latestRun(task.id) });
+  const running = latest.data?.status === 'running';
+
+  const run = useMutation({
+    mutationFn: () => api.runTask(task.id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['latestRun', task.id] }),
+  });
+
+  return (
+    <button
+      className="text-sm text-muted hover:text-text disabled:cursor-not-allowed disabled:opacity-50"
+      disabled={running || run.isPending}
+      onClick={() => run.mutate()}
+    >
+      {running ? 'Running…' : 'Run now'}
+    </button>
   );
 }

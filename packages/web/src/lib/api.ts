@@ -1,4 +1,4 @@
-import type { ApiRepo, ApiTask, CreateRepoBody, CreateTaskBody, UpdateTaskBody } from '@vesper/shared';
+import type { ApiRepo, ApiRun, ApiTask, CreateRepoBody, CreateTaskBody, UpdateTaskBody } from '@vesper/shared';
 
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -32,4 +32,6 @@ export const api = {
   pauseTask: (id: string) => post(`/api/tasks/${id}/pause`, {}).then(json<ApiTask>),
   resumeTask: (id: string) => post(`/api/tasks/${id}/resume`, {}).then(json<ApiTask>),
   deleteTask: (id: string) => del(`/api/tasks/${id}`).then(json<{ ok: true }>),
+  runTask: (id: string) => post(`/api/tasks/${id}/run`, {}).then(json<ApiRun>),
+  latestRun: (id: string) => fetch(`/api/tasks/${id}/latest-run`).then(json<ApiRun | null>),
 };

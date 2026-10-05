@@ -4,8 +4,8 @@
  * Vesper's own palette: near-black ink with panels a shade lighter, in the
  * mockups' dark theme. Reeve wires up the same --font-sans/--font-mono split
  * in its own index.css, so that's copied rather than re-decided; the colors
- * below are Vesper's, not Reeve's run-state tokens, since this app has no
- * runs yet.
+ * below are Vesper's own, not Reeve's run-state tokens — a run's status here
+ * is read straight off Tailwind's own palette, not a theme token of its own.
  */
 @theme {
   --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', 'Noto Sans', Arial, sans-serif;
