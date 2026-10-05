@@ -20,9 +20,6 @@ import { taskRoutes } from './routes/tasks.js';
 export function createApp() {
   const db = openDatabase(config.dbFile);
   runMigrations(db);
-  // A run still marked `running` here has no process behind it any more — the
-  // server that was watching it is the one just starting back up.
-  failOrphanedRuns(db);
 
   const app = new Hono();
   app.route('/api/repos', repoRoutes(db));
@@ -43,10 +40,16 @@ export function createApp() {
 
 /** Builds the app and serves it, resolving with the URL once it is listening. */
 export function startServer({ port = config.port }: { port?: number } = {}): Promise<string> {
-  const { app } = createApp();
+  const { app, db } = createApp();
 
   return new Promise((resolve, reject) => {
     const server = serve({ fetch: app.fetch, port, hostname: config.hostname }, (info) => {
+      // Only once this process has actually taken the port: a second `npm run
+      // dev` fails with EADDRINUSE before reaching here, and must not reap
+      // the runs the first one still owns. A run still marked `running` at
+      // this point has no process behind it any more — the server that was
+      // watching it is the one just starting back up.
+      failOrphanedRuns(db);
       const url = `http://${config.hostname}:${info.port}`;
       console.log(`[vesper] ${url}`);
       console.log(`[vesper] database: ${config.dbFile}`);
