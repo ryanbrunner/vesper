@@ -62,8 +62,11 @@ if (listRepos(db).length === 0) {
       toolUseMessage('Write', { file_path: 'notes/advisory.md' }),
     ],
   });
-  // Left running: a run with no finishedAt, so the task shows "Running…" and
-  // the dashboard's own in-flight styling the way a real one would.
+  // Left running: a run with no finishedAt, so the run-history strip has a
+  // fifth, distinct mark. Only lasts until the server actually starts,
+  // though — failOrphanedRuns reaps any row still `running` at boot, the
+  // same as it would a real one orphaned by a restart, so running `npm run
+  // db:seed` and then starting the server leaves this one `failed` instead.
   insertRun(db, { id: crypto.randomUUID(), taskId: audit.id, trigger: 'manual', startedAt: new Date() });
 
   createTask(db, {
