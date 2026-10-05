@@ -7,6 +7,11 @@ import cronstrue from 'cronstrue';
  * server, and the server can refuse it again regardless of who's asking.
  */
 export function isValidCron(expression: string): boolean {
+  // cron-parser also accepts 6-field (with seconds) expressions and `@daily`
+  // style aliases, and fills in whatever a short expression like `'5'`
+  // leaves out. None of that is the 5-field schedule this app stores, so the
+  // field count is checked before handing the string to the parser.
+  if (expression.trim().split(/\s+/).length !== 5) return false;
   try {
     CronExpressionParser.parse(expression);
     return true;
@@ -24,7 +29,7 @@ export function isValidCron(expression: string): boolean {
 export function describeCron(expression: string): string | null {
   if (!isValidCron(expression)) return null;
   try {
-    return cronstrue.toString(expression);
+    return cronstrue.toString(expression, { use24HourTimeFormat: true });
   } catch {
     return null;
   }
