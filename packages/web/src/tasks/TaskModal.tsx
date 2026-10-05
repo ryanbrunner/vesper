@@ -1,28 +1,41 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { describeCron, isValidCron, type ApiTask } from '@vesper/shared';
+import { describeCron, isValidCron, type ApiTask, type EffortLevel, type TaskModel } from '@vesper/shared';
 import { api } from '../lib/api.js';
+import { effortLevelsFor, keepEffort, modelOptions } from '../lib/models.js';
 import { RepoForm } from '../repos/RepoForm.js';
 
 /** Create when `task` is null, edit when it's a task. Same fields either way. */
 export function TaskModal({ task, onClose }: { task: ApiTask | null; onClose: () => void }) {
   const qc = useQueryClient();
   const repos = useQuery({ queryKey: ['repos'], queryFn: api.repos });
+  const models = useQuery({ queryKey: ['models'], queryFn: api.models, staleTime: Infinity });
 
   const [name, setName] = useState(task?.name ?? '');
   const [prompt, setPrompt] = useState(task?.prompt ?? '');
   const [repoId, setRepoId] = useState(task?.repoId ?? '');
   const [schedule, setSchedule] = useState(task?.schedule ?? '');
+  const [model, setModel] = useState(task?.model ?? '');
+  const [effort, setEffort] = useState(task?.effort ?? '');
   const [addingRepo, setAddingRepo] = useState(false);
 
   const scheduleValid = schedule.length === 0 || isValidCron(schedule);
   const preview = describeCron(schedule);
+  const modelList = models.data?.models ?? [];
+  const effortLevels = effortLevelsFor(modelList, model || null);
 
   const save = useMutation({
-    mutationFn: () =>
-      task
-        ? api.updateTask(task.id, { name, prompt, repoId, schedule })
-        : api.createTask({ name, prompt, repoId, schedule }),
+    mutationFn: () => {
+      const body = {
+        name,
+        prompt,
+        repoId,
+        schedule,
+        model: (model || null) as TaskModel | null,
+        effort: (effort || null) as EffortLevel | null,
+      };
+      return task ? api.updateTask(task.id, body) : api.createTask(body);
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['tasks'] });
       onClose();
@@ -105,6 +118,43 @@ export function TaskModal({ task, onClose }: { task: ApiTask | null; onClose: ()
             />
             {!scheduleValid && <p className="text-xs text-red-400">Not a valid cron expression.</p>}
             {preview && <p className="font-mono text-xs text-muted">{preview}</p>}
+          </label>
+
+          <label className="flex flex-col gap-1">
+            <span className="font-mono text-xs uppercase tracking-wide text-muted">Model</span>
+            <select
+              className="rounded border border-edge bg-ink px-2 py-1 text-sm text-text"
+              value={model}
+              onChange={(e) => {
+                const next = e.target.value;
+                setModel(next);
+                setEffort(keepEffort(modelList, next || null, (effort || null) as EffortLevel | null) ?? '');
+              }}
+            >
+              <option value="">Default</option>
+              {modelOptions(modelList).map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex flex-col gap-1">
+            <span className="font-mono text-xs uppercase tracking-wide text-muted">Effort</span>
+            <select
+              className="rounded border border-edge bg-ink px-2 py-1 text-sm text-text disabled:opacity-50"
+              value={effort}
+              onChange={(e) => setEffort(e.target.value)}
+              disabled={effortLevels.length === 0}
+            >
+              <option value="">{effortLevels.length === 0 ? 'No effort on this model' : 'Default'}</option>
+              {effortLevels.map((level) => (
+                <option key={level} value={level}>
+                  {level}
+                </option>
+              ))}
+            </select>
           </label>
 
           {save.isError && <p className="text-xs text-red-400">{save.error.message}</p>}
