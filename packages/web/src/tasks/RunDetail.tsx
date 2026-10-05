@@ -1,39 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
+import { asBlocks, blockText, summarizeToolUsage, type TranscriptBlock, type TranscriptMessageShape } from '@vesper/shared';
 import { api } from '../lib/api.js';
 import { formatCost, formatDuration, STATUS_COLOR } from './runFormat.js';
-
-/** One content block of an SDK message's `message.content`, read defensively — its shape is the SDK's to define, not ours. */
-interface TranscriptBlock {
-  type?: string;
-  text?: string;
-  thinking?: string;
-  name?: string;
-  input?: unknown;
-  content?: unknown;
-}
-
-/** The shape of one entry in a run's stored transcript — an SDK `assistant` or `user` message. */
-interface TranscriptMessageShape {
-  type?: 'assistant' | 'user';
-  parent_tool_use_id?: string | null;
-  message?: { content?: string | TranscriptBlock[] };
-}
-
-function asBlocks(content: string | TranscriptBlock[] | undefined): TranscriptBlock[] {
-  if (content == null) return [];
-  return typeof content === 'string' ? [{ type: 'text', text: content }] : content;
-}
-
-/** A tool result's own content is the same string-or-blocks shape as a message's. */
-function blockText(content: unknown): string {
-  if (typeof content === 'string') return content;
-  if (Array.isArray(content)) {
-    return content
-      .map((b: TranscriptBlock) => b.text ?? JSON.stringify(b))
-      .join('\n');
-  }
-  return JSON.stringify(content);
-}
+import { ToolUsagePanel } from './ToolUsage.js';
 
 /**
  * One block of one transcript message: assistant text, a tool call and its
@@ -100,6 +69,7 @@ export function RunDetail({ runId, onClose }: { runId: string; onClose: () => vo
     queryFn: () => api.run(runId),
     refetchInterval: (query) => (query.state.data?.status === 'running' ? 2000 : false),
   });
+  const toolUsage = summarizeToolUsage(run.data?.transcript);
 
   return (
     <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/60 px-4">
@@ -131,6 +101,12 @@ export function RunDetail({ runId, onClose }: { runId: string; onClose: () => vo
             <div className="mb-4">
               <p className="mb-1 font-mono text-xs uppercase tracking-wide text-muted">Result</p>
               <p className="whitespace-pre-wrap text-sm text-text">{run.data.resultText}</p>
+            </div>
+          )}
+
+          {toolUsage.length > 0 && (
+            <div className="mb-4">
+              <ToolUsagePanel usage={toolUsage} />
             </div>
           )}
 

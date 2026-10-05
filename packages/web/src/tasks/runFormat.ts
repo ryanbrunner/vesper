@@ -29,3 +29,8 @@ export function formatDuration(run: Pick<ApiRun, 'startedAt' | 'finishedAt'>): s
 export function formatCost(totalCostUsd: number | null): string {
   return totalCostUsd == null ? '—' : `$${totalCostUsd.toFixed(totalCostUsd < 1 ? 4 : 2)}`;
 }
+
+/** A token count as a short "1.2k"/"834" string, for the tool-usage panel's token column. */
+export function formatTokens(n: number): string {
+  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+}
