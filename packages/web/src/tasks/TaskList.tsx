@@ -1,14 +1,24 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { describeCron, type ApiRun, type ApiTask } from '@vesper/shared';
+import { describeCron, type ApiTask } from '@vesper/shared';
 import { api } from '../lib/api.js';
+import { STATUS_COLOR } from './runFormat.js';
 
 /**
  * One row per task, in the mockup's resting-state shape: name, schedule as
  * plain language, a repo pill, an enabled/paused badge, and actions. Below
- * that, at most the latest run's own status — a full history, with its
- * transcript and tokens, is the run dashboard card's job, not this one's.
+ * that, the latest run's own status, so a failing task stands out at a
+ * glance — the full history, with its transcript, is what opening "History"
+ * gets you.
  */
-export function TaskList({ tasks, onEdit }: { tasks: ApiTask[]; onEdit: (task: ApiTask) => void }) {
+export function TaskList({
+  tasks,
+  onEdit,
+  onHistory,
+}: {
+  tasks: ApiTask[];
+  onEdit: (task: ApiTask) => void;
+  onHistory: (task: ApiTask) => void;
+}) {
   const qc = useQueryClient();
   const invalidate = () => qc.invalidateQueries({ queryKey: ['tasks'] });
 
@@ -55,6 +65,9 @@ export function TaskList({ tasks, onEdit }: { tasks: ApiTask[]; onEdit: (task: A
               {task.enabled ? 'Enabled' : 'Paused'}
             </span>
             <RunNowButton task={task} />
+            <button className="text-sm text-muted hover:text-text" onClick={() => onHistory(task)}>
+              History
+            </button>
             <button className="text-sm text-muted hover:text-text" onClick={() => onEdit(task)}>
               Edit
             </button>
@@ -76,14 +89,11 @@ export function TaskList({ tasks, onEdit }: { tasks: ApiTask[]; onEdit: (task: A
   );
 }
 
-const STATUS_COLOR: Record<ApiRun['status'], string> = {
-  running: 'text-sky-400',
-  succeeded: 'text-enabled-mark',
-  failed: 'text-red-400',
-  cancelled: 'text-muted',
-};
-
-/** Polled while a run is in flight, so the badge clears on its own once one finishes. */
+/**
+ * Polled while a run is in flight, so the badge clears on its own once one
+ * finishes. A failed run gets its error message alongside the status, in
+ * red, so a failing task stands out without opening its history.
+ */
 function LatestRun({ taskId }: { taskId: string }) {
   const latest = useQuery({
     queryKey: ['latestRun', taskId],
@@ -91,7 +101,12 @@ function LatestRun({ taskId }: { taskId: string }) {
     refetchInterval: (query) => (query.state.data?.status === 'running' ? 2000 : false),
   });
   if (!latest.data) return null;
-  return <p className={`font-mono text-xs ${STATUS_COLOR[latest.data.status]}`}>{latest.data.status}</p>;
+  return (
+    <p className={`truncate font-mono text-xs ${STATUS_COLOR[latest.data.status]}`}>
+      {latest.data.status}
+      {latest.data.status === 'failed' && latest.data.errorMessage && `: ${latest.data.errorMessage}`}
+    </p>
+  );
 }
 
 function RunNowButton({ task }: { task: ApiTask }) {
@@ -101,7 +116,10 @@ function RunNowButton({ task }: { task: ApiTask }) {
 
   const run = useMutation({
     mutationFn: () => api.runTask(task.id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['latestRun', task.id] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['latestRun', task.id] });
+      qc.invalidateQueries({ queryKey: ['runs', task.id] });
+    },
   });
 
   return (
