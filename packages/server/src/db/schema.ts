@@ -23,6 +23,10 @@ export const task = sqliteTable('task', {
   repoId: text('repo_id').notNull().references(() => repo.id, { onDelete: 'restrict' }),
   // A 5-field cron expression, evaluated in server-local time.
   schedule: text('schedule').notNull(),
+  // Both nullable with no default: null means "the CLI's own default", so
+  // every task that predates these columns keeps today's behaviour untouched.
+  model: text('model', { enum: ['sonnet', 'opus', 'haiku', 'fable'] }),
+  effort: text('effort', { enum: ['low', 'medium', 'high', 'xhigh', 'max'] }),
   enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
   createdAt: timestamp('created_at').notNull().default(sql`(unixepoch() * 1000)`),
   updatedAt: timestamp('updated_at').notNull().default(sql`(unixepoch() * 1000)`),
