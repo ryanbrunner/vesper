@@ -1,9 +1,13 @@
+import { config } from '../config.js';
 import { createApp } from '../index.js';
 import { createRepo, createTask, listRepos, setTaskEnabled } from './queries.js';
 
 const { db } = createApp();
 if (listRepos(db).length === 0) {
-  const vesper = createRepo(db, { name: 'vesper', path: process.cwd() });
+  // config.root rather than process.cwd(), which is wherever this script was
+  // launched from (packages/server under `npm run db:seed`, the repo root
+  // under `npm test` from the top) — this repo points at itself either way.
+  const vesper = createRepo(db, { name: 'vesper', path: config.root });
   const reeve = createRepo(db, { name: 'reeve', path: '/Users/ryan/code/reeve' });
 
   createTask(db, {
