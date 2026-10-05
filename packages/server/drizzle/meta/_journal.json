@@ -15,6 +15,13 @@
       "when": 1791204644542,
       "tag": "0001_premium_blockbuster",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1791210826046,
+      "tag": "0002_gigantic_black_panther",
+      "breakpoints": true
     }
   ]
 }
