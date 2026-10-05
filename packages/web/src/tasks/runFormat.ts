@@ -6,6 +6,10 @@ export const STATUS_COLOR: Record<ApiRun['status'], string> = {
   succeeded: 'text-enabled-mark',
   failed: 'text-red-400',
   cancelled: 'text-muted',
+  // The scheduler's own outcome: the task's previous run was still going
+  // when this one came due. Shows up in run history, never as the latest run
+  // (getLatestRun excludes it so it can't hide the in-flight run).
+  skipped: 'text-muted',
 };
 
 /**

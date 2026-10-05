@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { describeCron, isValidCron, type ApiTask } from '@vesper/shared';
+import { describeCron, isValidCron, isValidTimeZone, type ApiTask } from '@vesper/shared';
 import { api } from '../lib/api.js';
 import { RepoForm } from '../repos/RepoForm.js';
 
@@ -13,16 +13,18 @@ export function TaskModal({ task, onClose }: { task: ApiTask | null; onClose: ()
   const [prompt, setPrompt] = useState(task?.prompt ?? '');
   const [repoId, setRepoId] = useState(task?.repoId ?? '');
   const [schedule, setSchedule] = useState(task?.schedule ?? '');
+  const [timezone, setTimezone] = useState(task?.timezone ?? '');
   const [addingRepo, setAddingRepo] = useState(false);
 
   const scheduleValid = schedule.length === 0 || isValidCron(schedule);
+  const timezoneValid = timezone.length === 0 || isValidTimeZone(timezone);
   const preview = describeCron(schedule);
 
   const save = useMutation({
     mutationFn: () =>
       task
-        ? api.updateTask(task.id, { name, prompt, repoId, schedule })
-        : api.createTask({ name, prompt, repoId, schedule }),
+        ? api.updateTask(task.id, { name, prompt, repoId, schedule, timezone })
+        : api.createTask({ name, prompt, repoId, schedule, timezone }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['tasks'] });
       onClose();
@@ -107,6 +109,17 @@ export function TaskModal({ task, onClose }: { task: ApiTask | null; onClose: ()
             {preview && <p className="font-mono text-xs text-muted">{preview}</p>}
           </label>
 
+          <label className="flex flex-col gap-1">
+            <span className="font-mono text-xs uppercase tracking-wide text-muted">Time zone</span>
+            <input
+              className="rounded border border-edge bg-ink px-2 py-1 font-mono text-sm text-text"
+              placeholder="Machine's local time zone"
+              value={timezone}
+              onChange={(e) => setTimezone(e.target.value)}
+            />
+            {!timezoneValid && <p className="text-xs text-red-400">Not a recognised time zone.</p>}
+          </label>
+
           {save.isError && <p className="text-xs text-red-400">{save.error.message}</p>}
 
           <div className="mt-2 flex justify-end gap-2">
@@ -115,7 +128,7 @@ export function TaskModal({ task, onClose }: { task: ApiTask | null; onClose: ()
             </button>
             <button
               type="submit"
-              disabled={save.isPending || !scheduleValid || !repoId}
+              disabled={save.isPending || !scheduleValid || !timezoneValid || !repoId}
               className="rounded bg-enabled-fill px-3 py-1 text-sm text-text hover:brightness-110 disabled:opacity-50"
             >
               {task ? 'Save' : 'Create task'}

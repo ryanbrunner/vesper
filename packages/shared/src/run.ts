@@ -2,10 +2,15 @@
  * One execution of a task's prompt: who started it, when, how it ended, and
  * what Claude reported back. A task is run through a single server-side
  * entry point (packages/server/src/runs/claude.ts), and every call of it —
- * a "Run now" click or, later, the scheduler — leaves one of these behind.
+ * a "Run now" click or the scheduler — leaves one of these behind.
  */
 export type RunTrigger = 'manual' | 'scheduled';
-export type RunStatus = 'running' | 'succeeded' | 'failed' | 'cancelled';
+/**
+ * `skipped` is the scheduler's own outcome, never `runTask`'s: it never
+ * reaches `runTask` at all, because the task's previous run was still
+ * `running` when this one came due.
+ */
+export type RunStatus = 'running' | 'succeeded' | 'failed' | 'cancelled' | 'skipped';
 
 export interface ApiRun {
   id: string;
@@ -27,7 +32,7 @@ export interface ApiRun {
   /** The SDK's own `modelUsage`: per-model totals, subagents included. */
   modelUsage: unknown | null;
   numTurns: number | null;
-  /** Set on `failed`; left null for every other status. */
+  /** Set on `failed` and `skipped`; left null for every other status. */
   errorMessage: string | null;
 }
 

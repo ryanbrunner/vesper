@@ -10,6 +10,7 @@ import { failOrphanedRuns } from './db/queries.js';
 import { repoRoutes } from './routes/repos.js';
 import { runRoutes } from './routes/runs.js';
 import { taskRoutes } from './routes/tasks.js';
+import { startScheduler } from './runs/scheduler.js';
 
 /**
  * Pure: opens the database, runs migrations and mounts routes, nothing else.
@@ -50,6 +51,10 @@ export function startServer({ port = config.port }: { port?: number } = {}): Pro
       // this point has no process behind it any more — the server that was
       // watching it is the one just starting back up.
       failOrphanedRuns(db);
+      // Started after the reap above, and not a moment before: the
+      // scheduler's own overlap check reads a task's latest run, and every
+      // task would otherwise look mid-run until the reap got to it.
+      startScheduler(db);
       const url = `http://${config.hostname}:${info.port}`;
       console.log(`[vesper] ${url}`);
       console.log(`[vesper] database: ${config.dbFile}`);

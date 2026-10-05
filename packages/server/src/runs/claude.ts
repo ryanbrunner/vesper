@@ -39,7 +39,7 @@ export type QueryFn = typeof sdkQuery;
 
 /**
  * The single server-side entry point for actually running a task. A "Run
- * now" click and the scheduler card both call this and nothing else, so a
+ * now" click and the scheduler both call this and nothing else, so a
  * run started either way is recorded the same way.
  *
  * Inserts the `running` row and returns with it immediately — a run can take
