@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import type { Options, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import type { CanUseTool, Options, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { createRepo, createTask, getLatestRun } from '../db/queries.js';
 import { testDb, testRepoDir } from '../routes/test-helpers.js';
 import { cancelRun, runTask, type QueryFn } from './claude.js';
@@ -59,6 +59,7 @@ test('a successful run records the result, cost and usage', async () => {
     result: 'all done',
     total_cost_usd: 0.05,
     usage: { input_tokens: 10, output_tokens: 20 },
+    modelUsage: { 'claude-x': { inputTokens: 10, outputTokens: 20 } },
     num_turns: 3,
   } as unknown as SDKMessage;
 
@@ -71,9 +72,58 @@ test('a successful run records the result, cost and usage', async () => {
   assert.equal(latest?.resultText, 'all done');
   assert.equal(latest?.totalCostUsd, 0.05);
   assert.deepEqual(latest?.usage, { input_tokens: 10, output_tokens: 20 });
+  assert.deepEqual(latest?.modelUsage, { 'claude-x': { inputTokens: 10, outputTokens: 20 } });
   assert.equal(latest?.numTurns, 3);
   assert.equal(latest?.errorMessage, null);
   assert.ok(latest?.finishedAt);
+});
+
+test('a run is scoped to the repo and starts in auto mode, denying every escalated tool', async () => {
+  const { db, task } = setUp();
+  let seen: { cwd?: string; permissionMode?: string } = {};
+  const capture: QueryFn = ((args: { prompt: unknown; options: Options }) => {
+    seen = { cwd: args.options.cwd, permissionMode: args.options.permissionMode };
+    async function* gen() {
+      yield init;
+    }
+    return gen();
+  }) as unknown as QueryFn;
+
+  const { done } = runTask(db, task.id, 'manual', capture);
+  await done;
+
+  assert.equal(seen.permissionMode, 'auto');
+  assert.ok(seen.cwd);
+
+  // The same canUseTool callback the run actually wired up, exercised directly:
+  // a Bash call and a Write call are both denied, synchronously.
+  let canUseTool!: CanUseTool;
+  const captureCanUseTool: QueryFn = ((args: { prompt: unknown; options: Options }) => {
+    canUseTool = args.options.canUseTool!;
+    async function* gen() {
+      yield init;
+    }
+    return gen();
+  }) as unknown as QueryFn;
+  const second = runTask(db, task.id, 'manual', captureCanUseTool);
+  await second.done;
+
+  const callOptions = { signal: new AbortController().signal, toolUseID: 'test', requestId: 'test' };
+  const bash = await canUseTool('Bash', { command: 'git push' }, callOptions);
+  assert.equal(bash?.behavior, 'deny');
+  const write = await canUseTool('Write', { file_path: '/etc/passwd' }, callOptions);
+  assert.equal(write?.behavior, 'deny');
+});
+
+test('a session that does not actually start in auto mode fails the run', async () => {
+  const { db, task } = setUp();
+  const mismatch = { type: 'system', subtype: 'init', permissionMode: 'default' } as unknown as SDKMessage;
+  const { done } = runTask(db, task.id, 'manual', scripted([mismatch]));
+  await done;
+
+  const latest = getLatestRun(db, task.id);
+  assert.equal(latest?.status, 'failed');
+  assert.match(latest?.errorMessage ?? '', /Auto mode/);
 });
 
 test('a non-success result subtype fails the run', async () => {
