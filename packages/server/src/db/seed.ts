@@ -1,25 +1,35 @@
 import { config } from '../config.js';
 import { createApp } from '../index.js';
-import { createRepo, createTask, insertRun, listRepos, setRunStatus, setTaskEnabled } from './queries.js';
+import { createRepo, createTask, getRun, insertRun, listRepos, listTasks, setRunStatus, setTaskEnabled } from './queries.js';
 
 /**
- * One assistant turn that calls a single tool, with a plausible usage
- * figure attached — the shape `runs/claude.ts` stores straight off the SDK.
- * No MCP servers are wired up yet (that's a separate card), so nothing a
- * real run produces can exercise the tool-usage panel; this fabricates a
- * transcript that can, so Testing has something to capture.
+ * One assistant tool call, with a plausible usage figure attached, and the
+ * matching user-turn tool_result that follows it in a real transcript — the
+ * shape `runs/claude.ts` stores straight off the SDK. No MCP servers are
+ * wired up yet (that's a separate card), so nothing a real run produces can
+ * exercise the tool-usage panel; this fabricates a transcript that can, so
+ * Testing has something to capture.
  */
-function assistantToolCall(name: string, input: unknown, usage: { input_tokens: number; output_tokens: number }) {
-  return {
-    type: 'assistant',
-    message: {
-      content: [{ type: 'tool_use', name, input }],
-      usage,
+function toolCallPair(
+  name: string,
+  input: unknown,
+  result: string,
+  usage: { input_tokens: number; output_tokens: number },
+) {
+  return [
+    {
+      type: 'assistant',
+      message: { content: [{ type: 'tool_use', name, input }], usage },
     },
-  };
+    {
+      type: 'user',
+      message: { content: [{ type: 'tool_result', content: result }] },
+    },
+  ];
 }
 
 const { db } = createApp();
+let weeklyReviewId: string | undefined;
 if (listRepos(db).length === 0) {
   // config.root rather than process.cwd(), which is wherever this script was
   // launched from (packages/server under `npm run db:seed`, the repo root
@@ -48,6 +58,7 @@ if (listRepos(db).length === 0) {
     schedule: '0 21 * * 0', // Sundays 21:00
   });
   setTaskEnabled(db, weeklyReview.id, false);
+  weeklyReviewId = weeklyReview.id;
 
   createTask(db, {
     name: 'CI flake watch',
@@ -64,36 +75,41 @@ if (listRepos(db).length === 0) {
   });
   setTaskEnabled(db, monthlyReport.id, false);
 
-  // A fixed id, not crypto.randomUUID(), so '/?run=seed-run-tool-usage' is a
-  // deterministic capture URL for the tool-usage panel.
-  const toolUsageRun = insertRun(db, {
-    id: 'seed-run-tool-usage',
-    taskId: weeklyReview.id,
-    trigger: 'manual',
-    startedAt: new Date(),
-  });
-  setRunStatus(db, toolUsageRun.id, {
-    status: 'succeeded',
-    finishedAt: new Date(),
-    resultText: 'Reviewed the backlog across every connected integration and flagged three stale cards.',
-    totalCostUsd: 0.42,
-    numTurns: 10,
-    transcriptJson: [
-      assistantToolCall('mcp__slack__post_message', { channel: '#backlog', text: 'Weekly review is up.' }, { input_tokens: 820, output_tokens: 140 }),
-      assistantToolCall('mcp__notion__search', { query: 'backlog review' }, { input_tokens: 610, output_tokens: 95 }),
-      assistantToolCall('mcp__linear__list_issues', { team: 'vesper', state: 'stale' }, { input_tokens: 540, output_tokens: 160 }),
-      assistantToolCall('mcp__github__search_issues', { query: 'is:open label:stale' }, { input_tokens: 700, output_tokens: 180 }),
-      assistantToolCall('mcp__gmail__search', { query: 'backlog digest' }, { input_tokens: 480, output_tokens: 90 }),
-      assistantToolCall('mcp__google_drive__search', { query: 'backlog review notes' }, { input_tokens: 390, output_tokens: 70 }),
-      assistantToolCall('mcp__google_calendar__list_events', { calendarId: 'primary' }, { input_tokens: 350, output_tokens: 60 }),
-      assistantToolCall('WebSearch', { query: 'backlog grooming best practices' }, { input_tokens: 300, output_tokens: 120 }),
-      // Local filesystem/bash access, already wired today — excluded from the tool-usage panel.
-      assistantToolCall('Bash', { command: 'git log --oneline -20' }, { input_tokens: 220, output_tokens: 50 }),
-      assistantToolCall('Read', { file_path: 'Backlog.md' }, { input_tokens: 260, output_tokens: 40 }),
-    ],
-  });
-
-  console.log('[vesper] seeded 2 repos, 5 tasks, 1 tool-usage run');
+  console.log('[vesper] seeded 2 repos, 5 tasks');
 } else {
   console.log('[vesper] already seeded');
+}
+
+const TOOL_USAGE_RUN_ID = 'seed-run-tool-usage';
+// Kept outside the `listRepos` guard above, and keyed on its own fixed id
+// rather than the "already seeded" check: a DB seeded before this run
+// existed would otherwise never get it, and '/?run=seed-run-tool-usage'
+// would 404 forever.
+if (!getRun(db, TOOL_USAGE_RUN_ID)) {
+  const task = weeklyReviewId ?? listTasks(db)[0]?.id;
+  if (task) {
+    const startedAt = new Date(Date.now() - 90_000);
+    const toolUsageRun = insertRun(db, { id: TOOL_USAGE_RUN_ID, taskId: task, trigger: 'manual', startedAt });
+    setRunStatus(db, toolUsageRun.id, {
+      status: 'succeeded',
+      finishedAt: new Date(),
+      resultText: 'Reviewed the backlog across every connected integration and flagged three stale cards.',
+      totalCostUsd: 0.42,
+      numTurns: 10,
+      transcriptJson: [
+        ...toolCallPair('mcp__slack__post_message', { channel: '#backlog', text: 'Weekly review is up.' }, 'ok', { input_tokens: 820, output_tokens: 140 }),
+        ...toolCallPair('mcp__notion__search', { query: 'backlog review' }, '3 pages found', { input_tokens: 610, output_tokens: 95 }),
+        ...toolCallPair('mcp__linear__list_issues', { team: 'vesper', state: 'stale' }, '2 issues', { input_tokens: 540, output_tokens: 160 }),
+        ...toolCallPair('mcp__github__search_issues', { query: 'is:open label:stale' }, '1 issue', { input_tokens: 700, output_tokens: 180 }),
+        ...toolCallPair('mcp__gmail__search', { query: 'backlog digest' }, 'no matches', { input_tokens: 480, output_tokens: 90 }),
+        ...toolCallPair('mcp__google_drive__search', { query: 'backlog review notes' }, '1 doc found', { input_tokens: 390, output_tokens: 70 }),
+        ...toolCallPair('mcp__google_calendar__list_events', { calendarId: 'primary' }, 'no conflicts', { input_tokens: 350, output_tokens: 60 }),
+        ...toolCallPair('WebSearch', { query: 'backlog grooming best practices' }, 'top 5 results', { input_tokens: 300, output_tokens: 120 }),
+        // Local filesystem/bash access, already wired today — excluded from the tool-usage panel.
+        ...toolCallPair('Bash', { command: 'git log --oneline -20' }, '20 commits', { input_tokens: 220, output_tokens: 50 }),
+        ...toolCallPair('Read', { file_path: 'Backlog.md' }, 'file contents', { input_tokens: 260, output_tokens: 40 }),
+      ],
+    });
+    console.log('[vesper] seeded 1 tool-usage run');
+  }
 }
