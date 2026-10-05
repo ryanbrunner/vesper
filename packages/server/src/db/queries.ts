@@ -71,6 +71,8 @@ const taskColumns = {
   repoName: repo.name,
   schedule: task.schedule,
   timezone: task.timezone,
+  model: task.model,
+  effort: task.effort,
   enabled: task.enabled,
   createdAt: task.createdAt,
   updatedAt: task.updatedAt,

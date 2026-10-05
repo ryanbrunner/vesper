@@ -1,7 +1,8 @@
 import { query as sdkQuery, type Options, type SDKMessage, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import type { ApiRun, RunTrigger } from '@vesper/shared';
+import type { ApiRun, EffortLevel, RunTrigger } from '@vesper/shared';
 import type { Db } from '../db/client.js';
 import { getTaskWithRepo, insertRun, setRunStatus } from '../db/queries.js';
+import { capabilitiesFor } from './models.js';
 import { decideToolUse } from './permissions.js';
 import { runRegistry } from './registry.js';
 
@@ -16,12 +17,42 @@ export class TaskNotFoundError extends Error {}
 class AutoModeUnavailable extends Error {}
 
 /**
- * Every run asks for this. Unlike Reeve, Vesper never pins a model, so there
- * is no `fitToModel` step here to trim it away — auto mode is always what is
- * sent, and always what the session is expected to confirm in its own `init`
- * message.
+ * The permission mode every run asks for. A task that leaves `model` unset
+ * always gets it — `fitToModel(null, effort)` short-circuits to `autoMode:
+ * true` below. A pinned model that doesn't support it is left to start in
+ * its own default mode instead; see `fitToModel`.
  */
 const PERMISSION_MODE = 'auto' as const;
+
+/**
+ * Trims what a task asked for to what its pinned model takes, so a setting
+ * the model rejects never reaches it. No model (`null`) is the CLI's own
+ * default, which takes everything asked of it: that's the path every task
+ * followed before tasks could pin a model, and it is unchanged here. A
+ * pinned model the CLI did not list is sent through as asked, same as Reeve.
+ *
+ * `supportsAutoMode` is read the other way around from every other
+ * capability: only an explicit `true` keeps `permissionMode: 'auto'` in the
+ * request, because a model that never reports it (e.g. Haiku) starts a
+ * session in its own default mode instead of honouring the one asked for.
+ * Ported near-verbatim from Reeve's packages/server/src/runs/claude.ts.
+ */
+// Exported, and the lookup injectable, only so a test can hand this a model
+// the real CLI capability lookup can't answer for in the test sandbox.
+export async function fitToModel(
+  model: string | null,
+  effort: EffortLevel | null,
+  lookup: typeof capabilitiesFor = capabilitiesFor,
+): Promise<{ effort: EffortLevel | null; autoMode: boolean }> {
+  const caps = model ? await lookup(model) : undefined;
+  if (!caps) return { effort, autoMode: true };
+  const takesEffort =
+    effort !== null && caps.supportsEffort !== false && (caps.supportedEffortLevels?.includes(effort) ?? true);
+  return {
+    effort: takesEffort ? effort : null,
+    autoMode: caps.supportsAutoMode === true,
+  };
+}
 
 /** The SDK takes an async iterable for its prompt even for a single turn. */
 async function* singleMessage(text: string): AsyncIterable<SDKUserMessage> {
@@ -51,16 +82,29 @@ export type QueryFn = typeof sdkQuery;
  * nothing here configures either — no `options.env`, which would replace
  * `process.env` rather than add to it and so drop both.
  *
- * Permissions: every run starts in `permissionMode: 'auto'`, `cwd` set to the
- * task's repo — the same classifier Claude Code's own auto mode uses, scoped
- * to that directory. Nothing it escalates is ever approved; see
- * runs/permissions.ts for why. Plainly: Claude can read files, edit them and
- * run commands, all inside the task's repo, exactly where auto mode would let
- * a person's own session do the same unattended. It cannot do anything auto
- * mode itself would stop to ask a person about, because these runs happen
- * with nobody there to ask.
+ * Permissions: `cwd` is always set to the task's repo, and `canUseTool`
+ * always denies — see runs/permissions.ts for why — so nothing a run
+ * escalates is ever approved, regardless of model. A task with no model
+ * pinned, or one whose model supports it, also gets `permissionMode: 'auto'`:
+ * the same classifier Claude Code's own auto mode uses, scoped to that
+ * directory, so Claude can read files, edit them and run commands, all inside
+ * the task's repo, exactly where auto mode would let a person's own session
+ * do the same unattended, and cannot do anything auto mode itself would stop
+ * to ask a person about. A pinned model that doesn't support auto mode (see
+ * `fitToModel`) starts in its own default mode instead, which escalates far
+ * more to that same always-deny callback — so that task can do markedly less
+ * unattended than one left on the CLI's default or an auto-mode-capable model.
  */
-export function runTask(db: Db, taskId: string, trigger: RunTrigger, query: QueryFn = sdkQuery): RunTaskHandle {
+export function runTask(
+  db: Db,
+  taskId: string,
+  trigger: RunTrigger,
+  query: QueryFn = sdkQuery,
+  // Only so a test can hand fitToModel a stubbed capability lookup instead of
+  // the real CLI handshake `capabilitiesFor`'s default would otherwise make;
+  // nothing in production passes a fifth argument.
+  lookup: typeof capabilitiesFor = capabilitiesFor,
+): RunTaskHandle {
   const task = getTaskWithRepo(db, taskId);
   if (!task) throw new TaskNotFoundError(`no task with id ${taskId}`);
 
@@ -83,7 +127,7 @@ export function runTask(db: Db, taskId: string, trigger: RunTrigger, query: Quer
     cwd: task.repo.path,
     abortController,
     sessionId: crypto.randomUUID(),
-    permissionMode: PERMISSION_MODE,
+    ...(task.model ? { model: task.model } : {}),
     // Nobody is watching to approve anything an auto-mode run escalates, so
     // this answers at once rather than leaving the run parked forever.
     canUseTool: (toolName, input) => Promise.resolve(decideToolUse(toolName, input)),
@@ -96,6 +140,16 @@ export function runTask(db: Db, taskId: string, trigger: RunTrigger, query: Quer
   const done = (async () => {
     let result: Extract<SDKMessage, { type: 'result' }> | null = null;
     try {
+      // Trims the task's own model/effort to what that model actually takes.
+      // A task with no model pinned short-circuits to autoMode: true here,
+      // exactly as every task behaved before this existed.
+      const fitted = await fitToModel(task.model, task.effort, lookup);
+      if (fitted.effort) options.effort = fitted.effort;
+      // A model without auto mode is left to start in its own default mode:
+      // options.permissionMode stays unset rather than sending a mode it does
+      // not take.
+      if (fitted.autoMode) options.permissionMode = PERMISSION_MODE;
+
       for await (const message of query({ prompt: singleMessage(task.prompt), options })) {
         if (message.type === 'assistant' || message.type === 'user') {
           transcript.push(message);
@@ -105,11 +159,12 @@ export function runTask(db: Db, taskId: string, trigger: RunTrigger, query: Quer
           setRunStatus(db, runId, { transcriptJson: transcript });
         }
         if (message.type === 'result') result = message;
-        if (message.type === 'system' && message.subtype === 'init' && message.permissionMode !== PERMISSION_MODE) {
+        if (message.type === 'system' && message.subtype === 'init' && fitted.autoMode && message.permissionMode !== PERMISSION_MODE) {
           abortController.abort();
+          const pinned = task.model ? ` for ${task.model}` : '';
           throw new AutoModeUnavailable(
-            `Auto mode is unavailable to this session, which started in ${message.permissionMode} mode instead, ` +
-              'so the run was stopped before Claude began: check the account Claude Code signs in with.',
+            `Auto mode is unavailable to this session${pinned}, which started in ${message.permissionMode} mode ` +
+              'instead, so the run was stopped before Claude began: check the account Claude Code signs in with.',
           );
         }
       }

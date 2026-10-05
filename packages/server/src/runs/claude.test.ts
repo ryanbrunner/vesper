@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { CanUseTool, Options, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import type { ApiModel } from '@vesper/shared';
 import { createRepo, createTask, getLatestRun, getRun } from '../db/queries.js';
 import { testDb, testRepoDir } from '../routes/test-helpers.js';
-import { cancelRun, runTask, type QueryFn } from './claude.js';
+import { cancelRun, fitToModel, runTask, type QueryFn } from './claude.js';
 
 function setUp() {
   const db = testDb();
@@ -212,4 +213,128 @@ test('cancelRun on an unknown run id returns false', () => {
 test('runTask throws for an unknown task id', () => {
   const { db } = setUp();
   assert.throws(() => runTask(db, 'no-such-task', 'manual', scripted([])));
+});
+
+test('a task with no model pinned sends auto mode and no model override, as before', async () => {
+  const { db, task } = setUp();
+  let seen: { model?: string; effort?: string; permissionMode?: string } = {};
+  const capture: QueryFn = ((args: { prompt: unknown; options: Options }) => {
+    seen = { model: args.options.model, effort: args.options.effort as string, permissionMode: args.options.permissionMode };
+    async function* gen() {
+      yield init;
+    }
+    return gen();
+  }) as unknown as QueryFn;
+
+  // Hands fitToModel's lookup a stub that would answer `caps` for any model —
+  // proving the "no override" behaviour comes from `task.model` being null,
+  // not from the lookup happening to find nothing.
+  const { done } = runTask(db, task.id, 'manual', capture, async () => ({
+    value: 'opus',
+    resolvedModel: null,
+    displayName: 'Opus',
+    description: '',
+    supportsAutoMode: true,
+  }));
+  await done;
+
+  assert.equal(seen.model, undefined);
+  assert.equal(seen.effort, undefined);
+  assert.equal(seen.permissionMode, 'auto');
+});
+
+test('fitToModel trims an effort level the model does not support', async () => {
+  const caps: ApiModel = {
+    value: 'haiku',
+    resolvedModel: null,
+    displayName: 'Haiku',
+    description: '',
+    supportsEffort: true,
+    supportedEffortLevels: ['low', 'medium'],
+  };
+  const fitted = await fitToModel('haiku', 'high', async () => caps);
+  assert.equal(fitted.effort, null);
+});
+
+test('fitToModel only keeps auto mode when the model explicitly reports it', async () => {
+  const caps: ApiModel = { value: 'haiku', resolvedModel: null, displayName: 'Haiku', description: '' };
+  const fitted = await fitToModel('haiku', null, async () => caps);
+  assert.equal(fitted.autoMode, false);
+});
+
+test('a pinned model and effort are forwarded to the SDK options', async () => {
+  const db = testDb();
+  const repo = createRepo(db, { name: 'vesper', path: testRepoDir() });
+  const task = createTask(db, {
+    name: 'nightly',
+    prompt: 'do the thing',
+    repoId: repo.id,
+    schedule: '0 2 * * *',
+    model: 'opus',
+    effort: 'high',
+  });
+
+  let seen: { model?: string; effort?: string; permissionMode?: string } = {};
+  const capture: QueryFn = ((args: { prompt: unknown; options: Options }) => {
+    seen = { model: args.options.model, effort: args.options.effort as string, permissionMode: args.options.permissionMode };
+    async function* gen() {
+      yield { type: 'system', subtype: 'init', permissionMode: 'auto' } as SDKMessage;
+    }
+    return gen();
+  }) as unknown as QueryFn;
+
+  const caps: ApiModel = {
+    value: 'opus',
+    resolvedModel: null,
+    displayName: 'Opus',
+    description: '',
+    supportsEffort: true,
+    supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
+    supportsAutoMode: true,
+  };
+
+  // The stubbed lookup, not a stubbed fitToModel: this is what proves
+  // `runTask` reads task.model/task.effort itself, rather than the stub
+  // supplying the values the assertions below check for.
+  const { done } = runTask(db, task.id, 'manual', capture, async () => caps);
+  await done;
+
+  assert.equal(seen.model, 'opus');
+  assert.equal(seen.effort, 'high');
+  assert.equal(seen.permissionMode, 'auto');
+});
+
+test('a model that does not support auto mode runs without one, and is not treated as a mismatch', async () => {
+  const db = testDb();
+  const repo = createRepo(db, { name: 'vesper', path: testRepoDir() });
+  const task = createTask(db, {
+    name: 'nightly',
+    prompt: 'do the thing',
+    repoId: repo.id,
+    schedule: '0 2 * * *',
+    model: 'haiku',
+  });
+
+  let seen: { permissionMode?: string } = {};
+  const capture: QueryFn = ((args: { prompt: unknown; options: Options }) => {
+    seen = { permissionMode: args.options.permissionMode };
+    async function* gen() {
+      // Reports a mode other than 'auto', the same way the real CLI does for
+      // a model that never took the request in the first place.
+      yield { type: 'system', subtype: 'init', permissionMode: 'default' } as SDKMessage;
+      yield { type: 'result', subtype: 'success', result: 'done' } as unknown as SDKMessage;
+    }
+    return gen();
+  }) as unknown as QueryFn;
+
+  const caps: ApiModel = { value: 'haiku', resolvedModel: null, displayName: 'Haiku', description: '' };
+  const { done } = runTask(db, task.id, 'manual', capture, async () => caps);
+  await done;
+
+  // options.permissionMode was never set, so nothing was sent for the model
+  // to reject in the first place.
+  assert.equal(seen.permissionMode, undefined);
+
+  const latest = getLatestRun(db, task.id);
+  assert.equal(latest?.status, 'succeeded');
 });

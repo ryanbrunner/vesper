@@ -6,6 +6,7 @@ import type {
   ApiToolUsage,
   CreateRepoBody,
   CreateTaskBody,
+  ModelsResponse,
   UpdateTaskBody,
 } from '@vesper/shared';
 
@@ -50,4 +51,7 @@ export const api = {
   // --- runs ---
   run: (id: string) => fetch(`/api/runs/${id}`).then(json<ApiRunDetail>),
   cancelRun: (id: string) => post(`/api/runs/${id}/cancel`, {}).then(json<{ ok: true }>),
+
+  // --- models ---
+  models: () => fetch('/api/models').then(json<ModelsResponse>),
 };
