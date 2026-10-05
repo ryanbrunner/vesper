@@ -1,9 +1,9 @@
 import { z } from 'zod';
 
 /**
- * A directory a task can run its prompt in. Deliberately thin — a name and an
- * absolute path, checked against the filesystem on create — because nothing
- * here executes a task yet; this is just a place to point one at.
+ * A directory a task can run its prompt in — the `cwd` its run gets. Kept
+ * thin: just a name and an absolute path, checked against the filesystem on
+ * create.
  */
 export interface ApiRepo {
   id: string;
