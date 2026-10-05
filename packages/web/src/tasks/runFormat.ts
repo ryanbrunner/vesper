@@ -13,6 +13,21 @@ export const STATUS_COLOR: Record<ApiRun['status'], string> = {
 };
 
 /**
+ * The same palette as STATUS_COLOR, as `bg-*` classes for the run-history
+ * strip's marks. Kept as its own literal map, not built from STATUS_COLOR by
+ * swapping the `text-` prefix: Tailwind only generates a utility for a class
+ * string it can find written out somewhere, and a string built at runtime by
+ * `.replace()` doesn't count.
+ */
+export const STATUS_MARK: Record<ApiRun['status'], string> = {
+  running: 'bg-sky-400',
+  succeeded: 'bg-enabled-mark',
+  failed: 'bg-red-400',
+  cancelled: 'bg-muted',
+  skipped: 'bg-muted',
+};
+
+/**
  * Wall-clock duration, as a short "1m 04s"/"12s" string. For a run still
  * going, measured against `now` rather than `finishedAt` — the caller is
  * expected to re-render on an interval if it wants this to tick.

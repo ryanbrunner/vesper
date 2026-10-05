@@ -1,17 +1,17 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api.js';
-import { STATUS_COLOR } from './runFormat.js';
+import { STATUS_MARK } from './runFormat.js';
 
 /** How many of a task's most recent runs the strip shows, oldest to newest, left to right. */
 const STRIP_LENGTH = 10;
 
 /**
  * A compact run-history strip: a task's last few runs as small colored marks
- * by status, the same STATUS_COLOR the history modal and run detail use.
- * Lets a row's recent pattern — steady green, one red blip, a stretch of
- * grey while paused — read at a glance, next to the latest-run line, without
- * opening History. Polls while any run here is still going, the same
- * pattern TaskList's own LatestRun uses.
+ * by status, the same palette STATUS_MARK shares with STATUS_COLOR. Lets a
+ * row's recent pattern — steady green, one red blip, a stretch of grey while
+ * paused — read at a glance, next to the latest-run line, without opening
+ * History. Polls while any run here is still going, the same pattern
+ * TaskList's own LatestRun uses.
  */
 export function RunHistoryStrip({ taskId }: { taskId: string }) {
   const runs = useQuery({
@@ -30,7 +30,7 @@ export function RunHistoryStrip({ taskId }: { taskId: string }) {
         <span
           key={run.id}
           title={`${run.trigger} · ${run.status}`}
-          className={`h-1.5 w-1.5 rounded-full ${STATUS_COLOR[run.status].replace('text-', 'bg-')}`}
+          className={`h-1.5 w-1.5 rounded-full ${STATUS_MARK[run.status]}`}
         />
       ))}
     </div>
