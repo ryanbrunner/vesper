@@ -46,3 +46,20 @@ export interface ApiRun {
 export interface ApiRunDetail extends ApiRun {
   transcript: unknown[] | null;
 }
+
+/**
+ * How often a task's runs have called tools, tallied server-side from their
+ * transcripts rather than shipped as transcripts for the client to count.
+ * `name` is either the `<server>` of an MCP tool call (`mcp__<server>__<tool>`)
+ * or the literal `'Other'`, which every built-in tool (`Read`, `Bash`, …)
+ * buckets under rather than each keeping its own row — there is no per-tool
+ * integration to attribute those to yet. No per-call token or cost figure
+ * either, since ApiRun only stores those per run.
+ */
+export interface ApiToolUsage {
+  name: string;
+  /** Total tool_use blocks counted under this name, across every run considered. */
+  callCount: number;
+  /** How many of those runs made at least one call under this name. */
+  runCount: number;
+}

@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { describeCron, type ApiTask } from '@vesper/shared';
 import { api } from '../lib/api.js';
 import { findModel } from '../lib/models.js';
+import { RunHistoryStrip } from './RunHistoryStrip.js';
 import { STATUS_COLOR } from './runFormat.js';
 
 /**
@@ -49,7 +51,9 @@ export function TaskList({
         >
           <div className="flex min-w-0 flex-col gap-1">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="font-medium text-text">{task.name}</span>
+              <Link to={`/tasks/${task.id}`} className="font-medium text-text hover:underline">
+                {task.name}
+              </Link>
               <span className="rounded-full border border-edge px-2 py-0.5 font-mono text-xs text-muted">
                 {task.repoName}
               </span>
@@ -63,6 +67,7 @@ export function TaskList({
             </div>
             <p className="font-mono text-xs text-muted">{describeCron(task.schedule) ?? task.schedule}</p>
             <LatestRun taskId={task.id} />
+            <RunHistoryStrip taskId={task.id} />
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
