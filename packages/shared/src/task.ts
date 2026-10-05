@@ -1,0 +1,35 @@
+import { z } from 'zod';
+
+/**
+ * A scheduled AI task: a prompt, a repo to run it in, and a cron schedule.
+ * Nothing executes one yet — this is its definition, not a run of it.
+ */
+export interface ApiTask {
+  id: string;
+  name: string;
+  prompt: string;
+  repoId: string;
+  /** The repo's own name, carried inline so the list view needs one round trip. */
+  repoName: string;
+  /** A 5-field cron expression, evaluated in server-local time. */
+  schedule: string;
+  enabled: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export const CreateTaskBody = z.object({
+  name: z.string().min(1, 'name is required'),
+  prompt: z.string().min(1, 'prompt is required'),
+  repoId: z.string().min(1, 'repoId is required'),
+  schedule: z.string().min(1, 'schedule is required'),
+});
+export type CreateTaskBody = z.infer<typeof CreateTaskBody>;
+
+export const UpdateTaskBody = z.object({
+  name: z.string().min(1).optional(),
+  prompt: z.string().min(1).optional(),
+  repoId: z.string().min(1).optional(),
+  schedule: z.string().min(1).optional(),
+});
+export type UpdateTaskBody = z.infer<typeof UpdateTaskBody>;

@@ -1,0 +1,23 @@
+{
+  "name": "vesper",
+  "description": "An eventual home for AI scheduled task management",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "npm run dev --workspace @vesper/server & npm run dev --workspace @vesper/web",
+    "dev:server": "npm run dev --workspace @vesper/server",
+    "dev:web": "npm run dev --workspace @vesper/web",
+    "build": "npm run build --workspace @vesper/web",
+    "start": "npm run start --workspace @vesper/server",
+    "db:seed": "npm run db:seed --workspace @vesper/server",
+    "db:generate": "npm run db:generate --workspace @vesper/server",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  }
+}
