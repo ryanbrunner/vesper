@@ -1,7 +1,17 @@
 import { Hono } from 'hono';
 import { CreateTaskBody, UpdateTaskBody } from '@vesper/shared';
 import type { Db } from '../db/client.js';
-import { ValidationError, createTask, deleteTask, getApiTask, listTasks, setTaskEnabled, updateTask } from '../db/queries.js';
+import {
+  ValidationError,
+  createTask,
+  deleteTask,
+  getApiTask,
+  getLatestRun,
+  listTasks,
+  setTaskEnabled,
+  updateTask,
+} from '../db/queries.js';
+import { TaskNotFoundError, runTask } from '../runs/claude.js';
 
 export function taskRoutes(db: Db) {
   const routes = new Hono();
@@ -57,6 +67,20 @@ export function taskRoutes(db: Db) {
     deleteTask(db, c.req.param('id'));
     return c.json({ ok: true });
   });
+
+  // 202, not 200 or 201: nothing created here has finished, and the run
+  // itself can take minutes. The row returned is the `running` one.
+  routes.post('/:id/run', (c) => {
+    try {
+      const { run } = runTask(db, c.req.param('id'), 'manual');
+      return c.json(run, 202);
+    } catch (e) {
+      if (e instanceof TaskNotFoundError) return c.json({ error: 'not found' }, 404);
+      throw e;
+    }
+  });
+
+  routes.get('/:id/latest-run', (c) => c.json(getLatestRun(db, c.req.param('id'))));
 
   return routes;
 }

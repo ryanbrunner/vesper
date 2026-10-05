@@ -6,7 +6,9 @@ import { relative } from 'node:path';
 import { config } from './config.js';
 import { openDatabase } from './db/client.js';
 import { runMigrations } from './db/migrate.js';
+import { failOrphanedRuns } from './db/queries.js';
 import { repoRoutes } from './routes/repos.js';
+import { runRoutes } from './routes/runs.js';
 import { taskRoutes } from './routes/tasks.js';
 
 /**
@@ -18,10 +20,14 @@ import { taskRoutes } from './routes/tasks.js';
 export function createApp() {
   const db = openDatabase(config.dbFile);
   runMigrations(db);
+  // A run still marked `running` here has no process behind it any more — the
+  // server that was watching it is the one just starting back up.
+  failOrphanedRuns(db);
 
   const app = new Hono();
   app.route('/api/repos', repoRoutes(db));
   app.route('/api/tasks', taskRoutes(db));
+  app.route('/api/runs', runRoutes());
   app.get('/healthz', (c) => c.json({ ok: true }));
 
   // In production the built frontend is served from the same origin and port.
