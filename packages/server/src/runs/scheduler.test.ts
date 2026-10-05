@@ -45,6 +45,20 @@ function clock(start: Date) {
   return { now: () => box.at, advance: (ms: number) => (box.at = new Date(box.at.getTime() + ms)) };
 }
 
+test('a boundary crossed by less than a second between ticks still fires', async () => {
+  const { db, task } = setUp();
+  const time = clock(new Date('2024-01-01T00:00:59.500Z'));
+  const scheduler = startScheduler(db, { now: time.now, query: succeeding(), tickMs: 1_000_000 });
+  try {
+    time.advance(750); // lands at 00:01:00.250Z, just past the minute boundary
+    scheduler.tick();
+    await new Promise((r) => setTimeout(r, 10));
+    assert.equal(getLatestRun(db, task.id)?.status, 'succeeded');
+  } finally {
+    scheduler.stop();
+  }
+});
+
 test('a due task fires through runTask, recorded with trigger scheduled', async () => {
   const { db, task } = setUp();
   const time = clock(new Date('2024-01-01T00:00:30Z'));
@@ -143,4 +157,57 @@ test('lastDueAt honours a task’s own time zone rather than always UTC', () => 
   const utc = lastDueAt('0 0 * * *', at, 'UTC');
   const farEast = lastDueAt('0 0 * * *', at, 'Pacific/Kiritimati'); // UTC+14
   assert.notEqual(utc.getTime(), farEast.getTime());
+});
+
+test('a task fires in its own time zone, not the machine running the tick', async () => {
+  const { db, task } = setUp('0 2 * * *');
+  updateTask(db, task.id, { timezone: 'UTC' });
+  const time = clock(new Date('2024-01-01T01:59:30Z'));
+  const scheduler = startScheduler(db, { now: time.now, query: succeeding(), tickMs: 1_000_000 });
+  try {
+    time.advance(60_000); // 02:00:30Z — 02:00 has come due in UTC
+    scheduler.tick();
+    await new Promise((r) => setTimeout(r, 10));
+    assert.equal(getLatestRun(db, task.id)?.status, 'succeeded');
+  } finally {
+    scheduler.stop();
+  }
+});
+
+test('the same clock does not fire a task scheduled against a time zone hours ahead', () => {
+  const { db, task } = setUp('0 2 * * *');
+  updateTask(db, task.id, { timezone: 'Pacific/Kiritimati' }); // UTC+14: 02:00 there is 12:00 the day before, in UTC
+  const time = clock(new Date('2024-01-01T01:59:30Z'));
+  const scheduler = startScheduler(db, { now: time.now, query: succeeding(), tickMs: 1_000_000 });
+  try {
+    time.advance(60_000);
+    scheduler.tick();
+    assert.equal(getLatestRun(db, task.id), null);
+  } finally {
+    scheduler.stop();
+  }
+});
+
+test('a gap wide enough to be a sleep or a stall is treated like a restart: no catch-up', async () => {
+  const { db, task } = setUp();
+  const time = clock(new Date('2024-01-01T00:00:30Z'));
+  const scheduler = startScheduler(db, { now: time.now, query: succeeding(), tickMs: 15_000 });
+  try {
+    time.advance(3 * 60 * 60 * 1000); // 3 hours, as if the machine slept through it
+    scheduler.tick();
+    assert.equal(getLatestRun(db, task.id), null);
+
+    // Ordinary ticking afterwards still works, each gap well under the
+    // sleep threshold, and still fires once a boundary is actually crossed.
+    time.advance(25_000);
+    scheduler.tick();
+    assert.equal(getLatestRun(db, task.id), null);
+
+    time.advance(25_000);
+    scheduler.tick();
+    await new Promise((r) => setTimeout(r, 10));
+    assert.equal(getLatestRun(db, task.id)?.status, 'succeeded');
+  } finally {
+    scheduler.stop();
+  }
 });

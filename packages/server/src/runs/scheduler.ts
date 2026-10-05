@@ -33,7 +33,11 @@ const DEFAULT_TICK_MS = 15_000;
  *   paused, is not run when things come back; there is no "catch-up" run
  *   either, by the same reasoning: these runs edit real repos and spend
  *   real money, and nothing should fire on a schedule nobody was there to
- *   see go by.
+ *   see go by. The same reasoning covers a gap inside a single run too — a
+ *   laptop put to sleep mid-session wakes `setInterval` back up with a tick
+ *   whose `baseline` is hours stale. A gap wider than a couple of ticks is
+ *   treated the same as a restart: the high-water mark is moved up to now
+ *   with nothing fired for whatever fell inside it.
  * - **Time zone defaults to the machine's own, unless a task sets its own.**
  *   `lastDueAt` is handed the task's `timezone` verbatim, including null.
  */
@@ -55,6 +59,10 @@ export function startScheduler(
       const baseline = checkedThrough.get(t.id);
       checkedThrough.set(t.id, at);
       if (!t.enabled || !baseline) continue;
+      // A gap this wide only happens if the process itself was asleep or
+      // stalled through it — the same "no catch-up" case as a restart, just
+      // without the restart to reset `checkedThrough` for us.
+      if (at.getTime() - baseline.getTime() > 2 * tickMs) continue;
 
       const due = lastDueAt(t.schedule, at, t.timezone);
       if (due <= baseline) continue;
