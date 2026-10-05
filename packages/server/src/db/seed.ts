@@ -37,6 +37,8 @@ if (listRepos(db).length === 0) {
     prompt: 'Check the last 6 hours of CI runs for intermittent failures.',
     repoId: vesper.id,
     schedule: '0 */6 * * *', // Every 6 hours
+    model: 'opus',
+    effort: 'high',
   });
 
   const monthlyReport = createTask(db, {

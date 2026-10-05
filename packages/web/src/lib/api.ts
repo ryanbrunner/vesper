@@ -1,4 +1,13 @@
-import type { ApiRepo, ApiRun, ApiRunDetail, ApiTask, CreateRepoBody, CreateTaskBody, UpdateTaskBody } from '@vesper/shared';
+import type {
+  ApiRepo,
+  ApiRun,
+  ApiRunDetail,
+  ApiTask,
+  CreateRepoBody,
+  CreateTaskBody,
+  ModelsResponse,
+  UpdateTaskBody,
+} from '@vesper/shared';
 
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -38,4 +47,7 @@ export const api = {
 
   // --- runs ---
   run: (id: string) => fetch(`/api/runs/${id}`).then(json<ApiRunDetail>),
+
+  // --- models ---
+  models: () => fetch('/api/models').then(json<ModelsResponse>),
 };

@@ -26,6 +26,10 @@ export const task = sqliteTable('task', {
   schedule: text('schedule').notNull(),
   // An IANA zone name. Null to run `schedule` in the machine's own local time.
   timezone: text('timezone'),
+  // Both nullable with no default: null means "the CLI's own default", so
+  // every task that predates these columns keeps today's behaviour untouched.
+  model: text('model', { enum: ['sonnet', 'opus', 'haiku', 'fable'] }),
+  effort: text('effort', { enum: ['low', 'medium', 'high', 'xhigh', 'max'] }),
   enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
   createdAt: timestamp('created_at').notNull().default(sql`(unixepoch() * 1000)`),
   updatedAt: timestamp('updated_at').notNull().default(sql`(unixepoch() * 1000)`),

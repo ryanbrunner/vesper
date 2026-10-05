@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { describeCron, type ApiTask } from '@vesper/shared';
 import { api } from '../lib/api.js';
+import { findModel } from '../lib/models.js';
 import { STATUS_COLOR } from './runFormat.js';
 
 /**
@@ -21,6 +22,7 @@ export function TaskList({
 }) {
   const qc = useQueryClient();
   const invalidate = () => qc.invalidateQueries({ queryKey: ['tasks'] });
+  const models = useQuery({ queryKey: ['models'], queryFn: api.models, staleTime: Infinity });
 
   const toggle = useMutation({
     mutationFn: (task: ApiTask) => (task.enabled ? api.pauseTask(task.id) : api.resumeTask(task.id)),
@@ -51,6 +53,13 @@ export function TaskList({
               <span className="rounded-full border border-edge px-2 py-0.5 font-mono text-xs text-muted">
                 {task.repoName}
               </span>
+              {(task.model || task.effort) && (
+                <span className="rounded-full border border-edge px-2 py-0.5 font-mono text-xs text-muted">
+                  {[task.model && (findModel(models.data?.models ?? [], task.model)?.displayName ?? task.model), task.effort]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </span>
+              )}
             </div>
             <p className="font-mono text-xs text-muted">{describeCron(task.schedule) ?? task.schedule}</p>
             <LatestRun taskId={task.id} />
