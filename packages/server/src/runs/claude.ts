@@ -82,24 +82,28 @@ export type QueryFn = typeof sdkQuery;
  * nothing here configures either — no `options.env`, which would replace
  * `process.env` rather than add to it and so drop both.
  *
- * Permissions: every run starts in `permissionMode: 'auto'`, `cwd` set to the
- * task's repo — the same classifier Claude Code's own auto mode uses, scoped
- * to that directory. Nothing it escalates is ever approved; see
- * runs/permissions.ts for why. Plainly: Claude can read files, edit them and
- * run commands, all inside the task's repo, exactly where auto mode would let
- * a person's own session do the same unattended. It cannot do anything auto
- * mode itself would stop to ask a person about, because these runs happen
- * with nobody there to ask.
+ * Permissions: `cwd` is always set to the task's repo, and `canUseTool`
+ * always denies — see runs/permissions.ts for why — so nothing a run
+ * escalates is ever approved, regardless of model. A task with no model
+ * pinned, or one whose model supports it, also gets `permissionMode: 'auto'`:
+ * the same classifier Claude Code's own auto mode uses, scoped to that
+ * directory, so Claude can read files, edit them and run commands, all inside
+ * the task's repo, exactly where auto mode would let a person's own session
+ * do the same unattended, and cannot do anything auto mode itself would stop
+ * to ask a person about. A pinned model that doesn't support auto mode (see
+ * `fitToModel`) starts in its own default mode instead, which escalates far
+ * more to that same always-deny callback — so that task can do markedly less
+ * unattended than one left on the CLI's default or an auto-mode-capable model.
  */
 export function runTask(
   db: Db,
   taskId: string,
   trigger: RunTrigger,
   query: QueryFn = sdkQuery,
-  // Only so a test can hand this a stubbed capability lookup instead of the
-  // real CLI handshake `fitToModel`'s default would otherwise make; nothing
-  // in production passes a fifth argument.
-  fitModel: typeof fitToModel = fitToModel,
+  // Only so a test can hand fitToModel a stubbed capability lookup instead of
+  // the real CLI handshake `capabilitiesFor`'s default would otherwise make;
+  // nothing in production passes a fifth argument.
+  lookup: typeof capabilitiesFor = capabilitiesFor,
 ): RunTaskHandle {
   const task = getTaskWithRepo(db, taskId);
   if (!task) throw new TaskNotFoundError(`no task with id ${taskId}`);
@@ -135,7 +139,7 @@ export function runTask(
       // Trims the task's own model/effort to what that model actually takes.
       // A task with no model pinned short-circuits to autoMode: true here,
       // exactly as every task behaved before this existed.
-      const fitted = await fitModel(task.model, task.effort);
+      const fitted = await fitToModel(task.model, task.effort, lookup);
       if (fitted.effort) options.effort = fitted.effort;
       // A model without auto mode is left to start in its own default mode:
       // options.permissionMode stays unset rather than sending a mode it does

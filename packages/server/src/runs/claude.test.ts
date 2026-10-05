@@ -170,9 +170,31 @@ test('runTask throws for an unknown task id', () => {
 });
 
 test('a task with no model pinned sends auto mode and no model override, as before', async () => {
-  const { effort, autoMode } = await fitToModel(null, 'high');
-  assert.equal(effort, 'high');
-  assert.equal(autoMode, true);
+  const { db, task } = setUp();
+  let seen: { model?: string; effort?: string; permissionMode?: string } = {};
+  const capture: QueryFn = ((args: { prompt: unknown; options: Options }) => {
+    seen = { model: args.options.model, effort: args.options.effort as string, permissionMode: args.options.permissionMode };
+    async function* gen() {
+      yield init;
+    }
+    return gen();
+  }) as unknown as QueryFn;
+
+  // Hands fitToModel's lookup a stub that would answer `caps` for any model —
+  // proving the "no override" behaviour comes from `task.model` being null,
+  // not from the lookup happening to find nothing.
+  const { done } = runTask(db, task.id, 'manual', capture, async () => ({
+    value: 'opus',
+    resolvedModel: null,
+    displayName: 'Opus',
+    description: '',
+    supportsAutoMode: true,
+  }));
+  await done;
+
+  assert.equal(seen.model, undefined);
+  assert.equal(seen.effort, undefined);
+  assert.equal(seen.permissionMode, 'auto');
 });
 
 test('fitToModel trims an effort level the model does not support', async () => {
@@ -225,7 +247,10 @@ test('a pinned model and effort are forwarded to the SDK options', async () => {
     supportsAutoMode: true,
   };
 
-  const { done } = runTask(db, task.id, 'manual', capture, async () => fitToModel('opus', 'high', async () => caps));
+  // The stubbed lookup, not a stubbed fitToModel: this is what proves
+  // `runTask` reads task.model/task.effort itself, rather than the stub
+  // supplying the values the assertions below check for.
+  const { done } = runTask(db, task.id, 'manual', capture, async () => caps);
   await done;
 
   assert.equal(seen.model, 'opus');
@@ -257,7 +282,7 @@ test('a model that does not support auto mode runs without one, and is not treat
   }) as unknown as QueryFn;
 
   const caps: ApiModel = { value: 'haiku', resolvedModel: null, displayName: 'Haiku', description: '' };
-  const { done } = runTask(db, task.id, 'manual', capture, async () => fitToModel('haiku', null, async () => caps));
+  const { done } = runTask(db, task.id, 'manual', capture, async () => caps);
   await done;
 
   // options.permissionMode was never set, so nothing was sent for the model
