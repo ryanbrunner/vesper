@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { CanUseTool, Options, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import { createRepo, createTask, getLatestRun } from '../db/queries.js';
+import { createRepo, createTask, getLatestRun, getRun } from '../db/queries.js';
 import { testDb, testRepoDir } from '../routes/test-helpers.js';
 import { cancelRun, runTask, type QueryFn } from './claude.js';
 
@@ -78,6 +78,19 @@ test('a successful run records the result, cost and usage', async () => {
   assert.ok(latest?.finishedAt);
 });
 
+test('a run keeps the assistant/user messages for its transcript, and drops everything else', async () => {
+  const { db, task } = setUp();
+  const assistantMsg = { type: 'assistant', message: { role: 'assistant', content: 'hi' } } as unknown as SDKMessage;
+  const userMsg = { type: 'user', message: { role: 'user', content: 'tool result' } } as unknown as SDKMessage;
+  const result = { type: 'result', subtype: 'success', result: 'done' } as unknown as SDKMessage;
+
+  const { run, done } = runTask(db, task.id, 'manual', scripted([init, assistantMsg, userMsg, result]));
+  await done;
+
+  const detail = getRun(db, run.id);
+  assert.deepEqual(detail?.transcript, [assistantMsg, userMsg]);
+});
+
 test('a run is scoped to the repo and starts in auto mode, denying every escalated tool', async () => {
   const { db, task } = setUp();
   let seen: { cwd?: string; permissionMode?: string } = {};
@@ -146,6 +159,39 @@ test('an error thrown mid-stream fails the run', async () => {
   const latest = getLatestRun(db, task.id);
   assert.equal(latest?.status, 'failed');
   assert.match(latest?.errorMessage ?? '', /ECONNRESET/);
+});
+
+/** A fake SDK that yields an assistant message after `init`, then hangs until abort. */
+function hangingAfterAssistant(assistantMsg: SDKMessage): QueryFn {
+  return (({ options }: { prompt: string | AsyncIterable<SDKUserMessage>; options: Options }) => {
+    async function* gen(): AsyncGenerator<SDKMessage> {
+      const signal = options.abortController!.signal;
+      const aborted = new Promise<never>((_, reject) => {
+        if (signal.aborted) reject(new Error('aborted by user'));
+        else signal.addEventListener('abort', () => reject(new Error('aborted by user')));
+      });
+      yield init;
+      yield assistantMsg;
+      await aborted;
+    }
+    return gen();
+  }) as unknown as QueryFn;
+}
+
+test('a run in flight has its transcript readable before it finishes', async () => {
+  const { db, task } = setUp();
+  const assistantMsg = { type: 'assistant', message: { role: 'assistant', content: 'hi' } } as unknown as SDKMessage;
+  const { run, done } = runTask(db, task.id, 'manual', hangingAfterAssistant(assistantMsg));
+
+  // Lets the message loop actually reach the assistant message and flush it
+  // before this test reads the row back.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(getRun(db, run.id)?.transcript, [assistantMsg]);
+  assert.equal(getRun(db, run.id)?.status, 'running');
+
+  assert.equal(cancelRun(run.id), true);
+  await done;
+  assert.equal(getRun(db, run.id)?.status, 'cancelled');
 });
 
 test('cancelRun stops an in-flight run', async () => {

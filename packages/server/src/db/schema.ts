@@ -53,4 +53,8 @@ export const run = sqliteTable('run', {
   modelUsageJson: text('model_usage_json', { mode: 'json' }),
   numTurns: integer('num_turns'),
   errorMessage: text('error_message'),
+  // The run's own `assistant`/`user` SDK messages, in order — everything else
+  // the SDK emits (status, progress, hooks, ...) is noise the run detail view
+  // has no use for, so claude.ts filters it out before this is ever set.
+  transcriptJson: text('transcript_json', { mode: 'json' }),
 });

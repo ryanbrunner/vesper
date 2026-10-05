@@ -35,3 +35,14 @@ export interface ApiRun {
   /** Set on `failed` and `skipped`; left null for every other status. */
   errorMessage: string | null;
 }
+
+/**
+ * `ApiRun` plus the transcript: the SDK's own `assistant`/`user` messages,
+ * in order, as sent over the wire by the run itself. Kept off the list and
+ * latest-run shapes — a task's history can be dozens of runs, and nothing
+ * there reads a transcript — and attached only to the single-run endpoint
+ * the run detail view calls.
+ */
+export interface ApiRunDetail extends ApiRun {
+  transcript: unknown[] | null;
+}

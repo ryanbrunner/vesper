@@ -35,7 +35,8 @@ decided along the way:
 
 - **Overlap.** If a task's own latest run is still `running` when its
   schedule comes due again, that occurrence is skipped rather than run a
-  second time alongside it — recorded as a `run` with `status: 'skipped'`.
+  second time alongside it — recorded as a `run` with `status: 'skipped'`,
+  which shows up in the task's run history (but never as its latest run).
 - **Missed runs.** No backlog is ever replayed, and there is no "catch-up"
   run either: a task's own high-water mark starts at the moment the
   scheduler first sees it — on boot, or when the task is first created — so

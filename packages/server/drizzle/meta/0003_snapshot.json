@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "883782fe-ee59-4174-b1df-2758c35cb08a",
-  "prevId": "f087f140-6e7f-463b-accc-e0d2953ffe0b",
+  "id": "f8112660-658a-40d6-a67f-3d84e6570a01",
+  "prevId": "883782fe-ee59-4174-b1df-2758c35cb08a",
   "tables": {
     "repo": {
       "name": "repo",
@@ -203,6 +203,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false
+        },
+        "timezone": {
+          "name": "timezone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
           "autoincrement": false
         },
         "enabled": {

@@ -7,6 +7,7 @@ import {
   deleteTask,
   getApiTask,
   getLatestRun,
+  listRuns,
   listTasks,
   setTaskEnabled,
   updateTask,
@@ -81,6 +82,9 @@ export function taskRoutes(db: Db) {
   });
 
   routes.get('/:id/latest-run', (c) => c.json(getLatestRun(db, c.req.param('id'))));
+
+  // Newest first, per run.ts's own doc comment on the row this reads.
+  routes.get('/:id/runs', (c) => c.json(listRuns(db, c.req.param('id'))));
 
   return routes;
 }
