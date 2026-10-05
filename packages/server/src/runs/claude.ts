@@ -91,7 +91,16 @@ export type QueryFn = typeof sdkQuery;
  * mode itself would stop to ask a person about, because these runs happen
  * with nobody there to ask.
  */
-export function runTask(db: Db, taskId: string, trigger: RunTrigger, query: QueryFn = sdkQuery): RunTaskHandle {
+export function runTask(
+  db: Db,
+  taskId: string,
+  trigger: RunTrigger,
+  query: QueryFn = sdkQuery,
+  // Only so a test can hand this a stubbed capability lookup instead of the
+  // real CLI handshake `fitToModel`'s default would otherwise make; nothing
+  // in production passes a fifth argument.
+  fitModel: typeof fitToModel = fitToModel,
+): RunTaskHandle {
   const task = getTaskWithRepo(db, taskId);
   if (!task) throw new TaskNotFoundError(`no task with id ${taskId}`);
 
@@ -126,7 +135,7 @@ export function runTask(db: Db, taskId: string, trigger: RunTrigger, query: Quer
       // Trims the task's own model/effort to what that model actually takes.
       // A task with no model pinned short-circuits to autoMode: true here,
       // exactly as every task behaved before this existed.
-      const fitted = await fitToModel(task.model, task.effort);
+      const fitted = await fitModel(task.model, task.effort);
       if (fitted.effort) options.effort = fitted.effort;
       // A model without auto mode is left to start in its own default mode:
       // options.permissionMode stays unset rather than sending a mode it does
