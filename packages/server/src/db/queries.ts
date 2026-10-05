@@ -150,6 +150,7 @@ function toApiRun(row: typeof run.$inferSelect): ApiRun {
     startedAt: row.startedAt.getTime(),
     finishedAt: row.finishedAt?.getTime() ?? null,
     usage: row.usageJson,
+    modelUsage: row.modelUsageJson,
   };
 }
 
@@ -166,6 +167,7 @@ export interface RunStatusPatch {
   resultText?: string | null;
   totalCostUsd?: number | null;
   usageJson?: unknown | null;
+  modelUsageJson?: unknown | null;
   numTurns?: number | null;
   errorMessage?: string | null;
 }

@@ -150,6 +150,7 @@ function finish(
     resultText: result && 'result' in result ? result.result : null,
     totalCostUsd: result?.total_cost_usd ?? null,
     usageJson: (result?.usage as Record<string, unknown>) ?? null,
+    modelUsageJson: (result?.modelUsage as Record<string, unknown>) ?? null,
     numTurns: result?.num_turns ?? null,
   });
 }

@@ -42,8 +42,12 @@ export const run = sqliteTable('run', {
   resultText: text('result_text'),
   totalCostUsd: real('total_cost_usd'),
   // The SDK result message's `usage` object, stored as-is: its shape is the
-  // SDK's to define, not ours to narrow.
+  // SDK's to define, not ours to narrow. Main-agent-loop tokens only; see
+  // modelUsageJson for the field the SDK itself calls the correct one.
   usageJson: text('usage_json', { mode: 'json' }),
+  // Per-model totals, including subagents — the SDK's own doc comment on
+  // `usage` calls this the field to prefer for token/cost accounting.
+  modelUsageJson: text('model_usage_json', { mode: 'json' }),
   numTurns: integer('num_turns'),
   errorMessage: text('error_message'),
 });

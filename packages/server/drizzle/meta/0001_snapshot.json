@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "3c1115ed-d67c-4ba4-b4b0-2ec66738572c",
+  "id": "f087f140-6e7f-463b-accc-e0d2953ffe0b",
   "prevId": "b2109724-e29d-45b9-9628-348907c980c5",
   "tables": {
     "repo": {
@@ -113,6 +113,13 @@
         },
         "usage_json": {
           "name": "usage_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "model_usage_json": {
+          "name": "model_usage_json",
           "type": "text",
           "primaryKey": false,
           "notNull": false,

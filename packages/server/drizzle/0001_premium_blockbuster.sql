@@ -8,6 +8,7 @@ CREATE TABLE `run` (
 	`result_text` text,
 	`total_cost_usd` real,
 	`usage_json` text,
+	`model_usage_json` text,
 	`num_turns` integer,
 	`error_message` text,
 	FOREIGN KEY (`task_id`) REFERENCES `task`(`id`) ON UPDATE no action ON DELETE cascade
