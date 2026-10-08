@@ -215,7 +215,7 @@ test('runTask throws for an unknown task id', () => {
   assert.throws(() => runTask(db, 'no-such-task', 'manual', scripted([])));
 });
 
-test('runTask rejects a second run while the first is still running', async () => {
+test('runTask rejects a second run while the first is still running, and allows one once it ends', async () => {
   const { db, task } = setUp();
   const { run, done } = runTask(db, task.id, 'manual', hanging());
 
@@ -223,6 +223,8 @@ test('runTask rejects a second run while the first is still running', async () =
 
   assert.equal(cancelRun(run.id), true);
   await done;
+
+  assert.doesNotThrow(() => runTask(db, task.id, 'manual', scripted([])));
 });
 
 test('a task with no model pinned sends auto mode and no model override, as before', async () => {

@@ -227,11 +227,12 @@ export function setRunStatus(db: Db, id: string, patch: RunStatusPatch): ApiRun 
 }
 
 /**
- * The most recent run of a task, for the list view's status badge and for
- * the scheduler's own overlap check. `skipped` rows are excluded: one
+ * The most recent run of a task, for the list view's status badge, the
+ * scheduler's own overlap check, and runTask's own guard against starting a
+ * second run on top of one still `running`. `skipped` rows are excluded: one
  * written while a real run is still in flight would otherwise look like the
- * latest run and hide it, clearing the "Running…" state the badge and the
- * overlap check both depend on. Null when nothing else has ever run.
+ * latest run and hide it, clearing the "Running…" state all three depend on.
+ * Null when nothing else has ever run.
  */
 export function getLatestRun(db: Db, taskId: string): ApiRun | null {
   const row = db
