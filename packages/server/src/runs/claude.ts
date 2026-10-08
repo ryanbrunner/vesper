@@ -1,7 +1,7 @@
 import { query as sdkQuery, type Options, type SDKMessage, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { mcpServerSlug, type ApiRun, type EffortLevel, type RunTrigger } from '@vesper/shared';
 import type { Db } from '../db/client.js';
-import { getTaskWithRepo, insertRun, setRunStatus } from '../db/queries.js';
+import { getLatestRun, getTaskWithRepo, insertRun, setRunStatus } from '../db/queries.js';
 import { capabilitiesFor } from './models.js';
 import { listMcpServers, type McpServerInfo } from './mcpServers.js';
 import { decideToolUse } from './permissions.js';
@@ -9,6 +9,16 @@ import { runRegistry } from './registry.js';
 
 /** Thrown when the task doesn't exist; the route turns this into a 404. */
 export class TaskNotFoundError extends Error {}
+
+/**
+ * Thrown when the task's latest run is still `running`; the route turns this
+ * into a 409. The scheduler already skips a tick rather than calling
+ * `runTask` while a task's previous run is still going, so this only ever
+ * fires for "Run now": a double-click can race the mutation ahead of the
+ * latest-run query invalidating, and without this, the second click would
+ * start a real second run against the same repo.
+ */
+export class RunAlreadyInProgressError extends Error {}
 
 /**
  * Thrown when the session's own init message reports a mode other than the
@@ -143,6 +153,11 @@ export function runTask(
 ): RunTaskHandle {
   const task = getTaskWithRepo(db, taskId);
   if (!task) throw new TaskNotFoundError(`no task with id ${taskId}`);
+
+  const latest = getLatestRun(db, taskId);
+  if (latest?.status === 'running') {
+    throw new RunAlreadyInProgressError(`task ${taskId} already has a run in progress`);
+  }
 
   const runId = crypto.randomUUID();
   const run = insertRun(db, { id: runId, taskId, trigger, startedAt: new Date() });

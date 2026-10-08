@@ -17,6 +17,14 @@ test('POST /:id/run on an unknown task returns 404', async () => {
   assert.equal(res.status, 404);
 });
 
+test('POST /:id/run returns 409 while the task\'s latest run is still running', async () => {
+  const { db, routes, task } = app();
+  insertRun(db, { id: 'run-1', taskId: task.id, trigger: 'manual', startedAt: new Date() });
+
+  const res = await routes.request(`/${task.id}/run`, { method: 'POST' });
+  assert.equal(res.status, 409);
+});
+
 test('GET /:id/latest-run is null before anything has run', async () => {
   const { routes, task } = app();
   const res = await routes.request(`/${task.id}/latest-run`);

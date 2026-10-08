@@ -4,7 +4,7 @@ import type { CanUseTool, Options, SDKMessage, SDKUserMessage } from '@anthropic
 import type { ApiModel } from '@vesper/shared';
 import { createRepo, createTask, getLatestRun, getRun } from '../db/queries.js';
 import { testDb, testRepoDir } from '../routes/test-helpers.js';
-import { cancelRun, fitToModel, runTask, type QueryFn } from './claude.js';
+import { RunAlreadyInProgressError, cancelRun, fitToModel, runTask, type QueryFn } from './claude.js';
 import type { McpServerInfo } from './mcpServers.js';
 
 function setUp() {
@@ -214,6 +214,18 @@ test('cancelRun on an unknown run id returns false', () => {
 test('runTask throws for an unknown task id', () => {
   const { db } = setUp();
   assert.throws(() => runTask(db, 'no-such-task', 'manual', scripted([])));
+});
+
+test('runTask rejects a second run while the first is still running, and allows one once it ends', async () => {
+  const { db, task } = setUp();
+  const { run, done } = runTask(db, task.id, 'manual', hanging());
+
+  assert.throws(() => runTask(db, task.id, 'manual', scripted([])), RunAlreadyInProgressError);
+
+  assert.equal(cancelRun(run.id), true);
+  await done;
+
+  assert.doesNotThrow(() => runTask(db, task.id, 'manual', scripted([])));
 });
 
 test('a task with no model pinned sends auto mode and no model override, as before', async () => {
