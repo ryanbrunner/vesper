@@ -1,0 +1,1 @@
+ALTER TABLE `task` ADD `allowed_mcp_servers` text;
