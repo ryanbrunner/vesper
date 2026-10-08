@@ -28,6 +28,10 @@ export function listRepos(db: Db): ApiRepo[] {
   return db.select(repoColumns).from(repo).orderBy(asc(repo.name)).all();
 }
 
+export function getRepo(db: Db, id: string): ApiRepo | undefined {
+  return db.select(repoColumns).from(repo).where(eq(repo.id, id)).get();
+}
+
 /**
  * Checked against the filesystem here, rather than left to a foreign-key-style
  * constraint SQLite has no way to express: a repo pointed at a directory that

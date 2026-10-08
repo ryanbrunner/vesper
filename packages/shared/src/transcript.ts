@@ -66,10 +66,14 @@ export interface IntegrationUsage {
   tokens: number;
 }
 
-/** A readable fallback label for an MCP server slug the panel doesn't already know a name for. */
-function titleCase(slug: string): string {
-  return slug
-    .split(/[_-]/)
+/**
+ * A readable fallback label for an MCP server name/slug nothing already has a
+ * name for — used both for a tool-usage bucket's slug and, by the MCP server
+ * picker, for a server's own configured name.
+ */
+export function titleCase(name: string): string {
+  return name
+    .split(/[_\s-]/)
     .filter(Boolean)
     .map((word) => word[0]!.toUpperCase() + word.slice(1))
     .join(' ');
