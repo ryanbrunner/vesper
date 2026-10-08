@@ -30,6 +30,11 @@ export const task = sqliteTable('task', {
   // every task that predates these columns keeps today's behaviour untouched.
   model: text('model', { enum: ['sonnet', 'opus', 'haiku', 'fable'] }),
   effort: text('effort', { enum: ['low', 'medium', 'high', 'xhigh', 'max'] }),
+  // Null means "nothing pre-approved" — every task that predates this column
+  // keeps today's behaviour, where every MCP tool call still reaches the
+  // always-deny canUseTool callback. A server named here has its tool calls
+  // run unattended instead; see runs/claude.ts.
+  allowedMcpServers: text('allowed_mcp_servers', { mode: 'json' }).$type<string[]>(),
   enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
   createdAt: timestamp('created_at').notNull().default(sql`(unixepoch() * 1000)`),
   updatedAt: timestamp('updated_at').notNull().default(sql`(unixepoch() * 1000)`),

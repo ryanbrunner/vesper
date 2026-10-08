@@ -73,6 +73,7 @@ const taskColumns = {
   timezone: task.timezone,
   model: task.model,
   effort: task.effort,
+  allowedMcpServers: task.allowedMcpServers,
   enabled: task.enabled,
   createdAt: task.createdAt,
   updatedAt: task.updatedAt,
