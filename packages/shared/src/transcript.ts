@@ -82,14 +82,16 @@ export function titleCase(name: string): string {
 /**
  * The CLI's own normalisation of a configured server's name into the slug it
  * uses inside an `mcp__<slug>__<tool>` tool name: every character that isn't
- * a letter or digit becomes `_`, so `claude.ai Supercast` yields
- * `claude_ai_Supercast`. Used to build the `mcp__<slug>` wildcard and the
- * exact `mcp__<slug>__<tool>` allow entries for a server a task picked to
- * pre-approve — the server is stored and shown by its own configured name,
- * never by this slug.
+ * a letter, digit, hyphen or underscore becomes `_`, so `claude.ai Supercast`
+ * yields `claude_ai_Supercast` — confirmed against a live session, which
+ * also confirmed a hyphen already in a server name (`vesper-probe`) is left
+ * alone, not turned into `_`. Used to build the `mcp__<slug>` wildcard and
+ * the exact `mcp__<slug>__<tool>` allow entries for a server a task picked
+ * to pre-approve — the server is stored and shown by its own configured
+ * name, never by this slug.
  */
 export function mcpServerSlug(serverName: string): string {
-  return serverName.replace(/[^a-zA-Z0-9]/g, '_');
+  return serverName.replace(/[^a-zA-Z0-9_-]/g, '_');
 }
 
 /**

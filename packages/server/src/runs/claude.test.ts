@@ -450,3 +450,31 @@ test('an allowedMcpServers name with characters the CLI normalises still gets a 
 
   assert.deepEqual(seen.allowedTools, ['mcp__claude_ai_Supercast__post']);
 });
+
+test('an allowedMcpServers name with a hyphen keeps it, since a live session showed the CLI leaves hyphens alone', async () => {
+  const db = testDb();
+  const repo = createRepo(db, { name: 'vesper', path: testRepoDir() });
+  const task = createTask(db, {
+    name: 'nightly',
+    prompt: 'do the thing',
+    repoId: repo.id,
+    schedule: '0 2 * * *',
+    allowedMcpServers: ['vesper-probe'],
+  });
+
+  let seen: { allowedTools?: string[] } = {};
+  const capture: QueryFn = ((args: { prompt: unknown; options: Options }) => {
+    seen = { allowedTools: args.options.allowedTools };
+    async function* gen() {
+      yield init;
+    }
+    return gen();
+  }) as unknown as QueryFn;
+
+  const listServers = async (): Promise<McpServerInfo[]> => [{ name: 'vesper-probe', status: 'connected', tools: ['echo'] }];
+
+  const { done } = runTask(db, task.id, 'manual', capture, undefined, listServers);
+  await done;
+
+  assert.deepEqual(seen.allowedTools, ['mcp__vesper-probe__echo']);
+});
