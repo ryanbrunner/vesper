@@ -49,3 +49,8 @@ export function formatCost(totalCostUsd: number | null): string {
 export function formatTokens(n: number): string {
   return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
 }
+
+/** The first `length` characters of `text`, with an ellipsis appended if it was cut short. */
+export function truncate(text: string, length: number): string {
+  return text.length > length ? `${text.slice(0, length)}…` : text;
+}
