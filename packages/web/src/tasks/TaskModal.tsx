@@ -9,7 +9,7 @@ import {
   type TaskModel,
 } from '@vesper/shared';
 import { api } from '../lib/api.js';
-import { effortLevelsFor, keepEffort, modelOptions } from '../lib/models.js';
+import { effortLevelsFor, keepEffort, mcpServerOptions, modelOptions } from '../lib/models.js';
 import { RepoForm } from '../repos/RepoForm.js';
 
 /** Create when `task` is null, edit when it's a task. Same fields either way. */
@@ -25,7 +25,26 @@ export function TaskModal({ task, onClose }: { task: ApiTask | null; onClose: ()
   const [timezone, setTimezone] = useState(task?.timezone ?? '');
   const [model, setModel] = useState(task?.model ?? '');
   const [effort, setEffort] = useState(task?.effort ?? '');
+  const [allowedMcpServers, setAllowedMcpServers] = useState<string[] | null>(task?.allowedMcpServers ?? null);
   const [addingRepo, setAddingRepo] = useState(false);
+
+  const repoMcpServers = useQuery({
+    queryKey: ['repoMcpServers', repoId],
+    queryFn: () => api.repoMcpServers(repoId),
+    enabled: !!repoId,
+  });
+  const mcpOptions = mcpServerOptions(repoMcpServers.data?.servers ?? [], allowedMcpServers);
+
+  const toggleMcpServer = (name: string) => {
+    setAllowedMcpServers((prev) => {
+      const current = prev ?? [];
+      const next = current.includes(name) ? current.filter((n) => n !== name) : [...current, name];
+      // Both null and [] mean "pre-approve nothing" today, but a fresh task
+      // with everything unchecked should keep sending null — the "never
+      // configured" state — not an explicit empty array.
+      return next.length === 0 ? null : next;
+    });
+  };
 
   const scheduleValid = schedule.length === 0 || isValidCron(schedule);
   const timezoneValid = timezone.length === 0 || isValidTimeZone(timezone);
@@ -43,6 +62,7 @@ export function TaskModal({ task, onClose }: { task: ApiTask | null; onClose: ()
         timezone,
         model: (model || null) as TaskModel | null,
         effort: (effort || null) as EffortLevel | null,
+        allowedMcpServers,
       };
       return task ? api.updateTask(task.id, body) : api.createTask(body);
     },
@@ -177,6 +197,27 @@ export function TaskModal({ task, onClose }: { task: ApiTask | null; onClose: ()
               ))}
             </select>
           </label>
+
+          <div className="flex flex-col gap-1">
+            <span className="font-mono text-xs uppercase tracking-wide text-muted">Pre-approved MCP servers</span>
+            <p className="text-xs text-muted">
+              Checked servers run every tool call unattended, without asking — not just read access, so pick only servers this task
+              should act through on its own.
+            </p>
+            {!repoId && <p className="text-xs text-muted">Choose a repo to see its MCP servers.</p>}
+            {repoId && mcpOptions.length === 0 && <p className="text-xs text-muted">No MCP servers found for this repo.</p>}
+            {mcpOptions.map((o) => (
+              <label key={o.name} className="flex items-center gap-2 text-sm text-text">
+                <input
+                  type="checkbox"
+                  checked={(allowedMcpServers ?? []).includes(o.name)}
+                  onChange={() => toggleMcpServer(o.name)}
+                />
+                <span>{o.label}</span>
+                {o.status && o.status !== 'connected' && <span className="text-xs text-muted">({o.status})</span>}
+              </label>
+            ))}
+          </div>
 
           {save.isError && <p className="text-xs text-red-400">{save.error.message}</p>}
 
