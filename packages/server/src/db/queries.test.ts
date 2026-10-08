@@ -117,3 +117,39 @@ test('an effort level the schema does not know is rejected, not stored', () => {
   });
   assert.equal(parsed.success, false);
 });
+
+test('a task created with allowedMcpServers round-trips through createTask and the API row', () => {
+  const db = testDb();
+  const repo = createRepo(db, { name: 'vesper', path: testRepoDir() });
+  const task = createTask(db, {
+    name: 'nightly',
+    prompt: 'do the thing',
+    repoId: repo.id,
+    schedule: '0 2 * * *',
+    allowedMcpServers: ['slack', 'notion'],
+  });
+
+  const api = getApiTask(db, task.id);
+  assert.deepEqual(api?.allowedMcpServers, ['slack', 'notion']);
+});
+
+test('a task created with no allowedMcpServers keeps it null, not an empty array', () => {
+  const db = testDb();
+  const repo = createRepo(db, { name: 'vesper', path: testRepoDir() });
+  const task = createTask(db, { name: 'nightly', prompt: 'do the thing', repoId: repo.id, schedule: '0 2 * * *' });
+
+  const api = getApiTask(db, task.id);
+  assert.equal(api?.allowedMcpServers, null);
+});
+
+test('updateTask can set and clear allowedMcpServers independently of other fields', () => {
+  const db = testDb();
+  const repo = createRepo(db, { name: 'vesper', path: testRepoDir() });
+  const task = createTask(db, { name: 'nightly', prompt: 'do the thing', repoId: repo.id, schedule: '0 2 * * *' });
+
+  updateTask(db, task.id, { allowedMcpServers: ['slack'] });
+  assert.deepEqual(getApiTask(db, task.id)?.allowedMcpServers, ['slack']);
+
+  updateTask(db, task.id, { allowedMcpServers: null });
+  assert.equal(getApiTask(db, task.id)?.allowedMcpServers, null);
+});

@@ -68,36 +68,46 @@ async function discover(repoPath: string): Promise<McpServerInfo[]> {
 }
 
 /**
+ * Builds a per-repo-path cached lookup over `discoverFn`, each repo path
+ * asked once and kept — until a result says otherwise. A failure to reach
+ * the CLI at all answers `[]` and is asked again on the next call, same as
+ * listModels(). A result that settled with a server still `pending`,
+ * `failed`, or `needs-auth` is not kept either: that server may connect on a
+ * later run, and pinning the unsettled answer for the process lifetime would
+ * strand its pre-approval on the bare wildcard fallback until a restart.
+ *
+ * Exported as a factory, not just the one instance below, so a test can
+ * drive the caching behaviour against a stubbed `discoverFn` rather than a
+ * real CLI.
+ */
+export function cachedMcpServerLookup(
+  discoverFn: (repoPath: string) => Promise<McpServerInfo[]>,
+): (repoPath: string) => Promise<McpServerInfo[]> {
+  const cache = new Map<string, Promise<McpServerInfo[]>>();
+
+  return (repoPath: string) => {
+    const cached = cache.get(repoPath);
+    if (cached) return cached;
+
+    const result = discoverFn(repoPath)
+      .then((servers) => {
+        if (servers.some((s) => s.status !== 'connected')) cache.delete(repoPath);
+        return servers;
+      })
+      .catch((err: unknown) => {
+        console.log(`[vesper] could not list MCP servers for ${repoPath}: ${String(err)}`);
+        cache.delete(repoPath);
+        return [];
+      });
+    cache.set(repoPath, result);
+    return result;
+  };
+}
+
+/**
  * Cached per repo path, not in a single process-wide slot the way
  * listModels() caches models: MCP servers are configured per repo
  * (`cwd: task.repo.path`), so a task against one repo must never see
  * another repo's servers.
  */
-const cache = new Map<string, Promise<McpServerInfo[]>>();
-
-/**
- * Every MCP server a repo has configured, and its tools, each asked once per
- * repo path and kept — until a result says otherwise. A failure to reach the
- * CLI at all answers `[]` and is asked again on the next call, same as
- * listModels(). A result that settled with a server still `pending`,
- * `failed`, or `needs-auth` is not kept either: that server may connect on a
- * later run, and pinning the unsettled answer for the process lifetime would
- * strand its pre-approval on the bare wildcard fallback until a restart.
- */
-export function listMcpServers(repoPath: string): Promise<McpServerInfo[]> {
-  const cached = cache.get(repoPath);
-  if (cached) return cached;
-
-  const result = discover(repoPath)
-    .then((servers) => {
-      if (servers.some((s) => s.status !== 'connected')) cache.delete(repoPath);
-      return servers;
-    })
-    .catch((err: unknown) => {
-      console.log(`[vesper] could not list MCP servers for ${repoPath}: ${String(err)}`);
-      cache.delete(repoPath);
-      return [];
-    });
-  cache.set(repoPath, result);
-  return result;
-}
+export const listMcpServers = cachedMcpServerLookup(discover);

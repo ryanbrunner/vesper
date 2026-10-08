@@ -5,6 +5,7 @@ import type { ApiModel } from '@vesper/shared';
 import { createRepo, createTask, getLatestRun, getRun } from '../db/queries.js';
 import { testDb, testRepoDir } from '../routes/test-helpers.js';
 import { cancelRun, fitToModel, runTask, type QueryFn } from './claude.js';
+import type { McpServerInfo } from './mcpServers.js';
 
 function setUp() {
   const db = testDb();
@@ -337,4 +338,115 @@ test('a model that does not support auto mode runs without one, and is not treat
 
   const latest = getLatestRun(db, task.id);
   assert.equal(latest?.status, 'succeeded');
+});
+
+test('a task with no allowedMcpServers leaves allowedTools unset, and canUseTool still denies an MCP call', async () => {
+  const { db, task } = setUp();
+  let seen: { allowedTools?: string[] } = {};
+  let canUseTool!: CanUseTool;
+  const capture: QueryFn = ((args: { prompt: unknown; options: Options }) => {
+    seen = { allowedTools: args.options.allowedTools };
+    canUseTool = args.options.canUseTool!;
+    async function* gen() {
+      yield init;
+    }
+    return gen();
+  }) as unknown as QueryFn;
+
+  const { done } = runTask(db, task.id, 'manual', capture);
+  await done;
+
+  assert.equal(seen.allowedTools, undefined);
+  const callOptions = { signal: new AbortController().signal, toolUseID: 'test', requestId: 'test' };
+  const denied = await canUseTool('mcp__slack__send_message', {}, callOptions);
+  assert.equal(denied?.behavior, 'deny');
+});
+
+test('a task with allowedMcpServers builds exact mcp__<server>__<tool> entries from the discovered tool list', async () => {
+  const db = testDb();
+  const repo = createRepo(db, { name: 'vesper', path: testRepoDir() });
+  const task = createTask(db, {
+    name: 'nightly',
+    prompt: 'do the thing',
+    repoId: repo.id,
+    schedule: '0 2 * * *',
+    allowedMcpServers: ['slack'],
+  });
+
+  let seen: { allowedTools?: string[] } = {};
+  const capture: QueryFn = ((args: { prompt: unknown; options: Options }) => {
+    seen = { allowedTools: args.options.allowedTools };
+    async function* gen() {
+      yield init;
+    }
+    return gen();
+  }) as unknown as QueryFn;
+
+  const listServers = async (): Promise<McpServerInfo[]> => [
+    { name: 'slack', status: 'connected', tools: ['send_message', 'list_channels'] },
+  ];
+
+  const { done } = runTask(db, task.id, 'manual', capture, undefined, listServers);
+  await done;
+
+  assert.deepEqual(seen.allowedTools, ['mcp__slack__send_message', 'mcp__slack__list_channels']);
+});
+
+test('a server still pending or failed at run time falls back to the bare mcp__<server> wildcard', async () => {
+  const db = testDb();
+  const repo = createRepo(db, { name: 'vesper', path: testRepoDir() });
+  const task = createTask(db, {
+    name: 'nightly',
+    prompt: 'do the thing',
+    repoId: repo.id,
+    schedule: '0 2 * * *',
+    allowedMcpServers: ['slack', 'notion'],
+  });
+
+  let seen: { allowedTools?: string[] } = {};
+  const capture: QueryFn = ((args: { prompt: unknown; options: Options }) => {
+    seen = { allowedTools: args.options.allowedTools };
+    async function* gen() {
+      yield init;
+    }
+    return gen();
+  }) as unknown as QueryFn;
+
+  // slack is still pending, and notion was never reported at all.
+  const listServers = async (): Promise<McpServerInfo[]> => [{ name: 'slack', status: 'pending', tools: [] }];
+
+  const { done } = runTask(db, task.id, 'manual', capture, undefined, listServers);
+  await done;
+
+  assert.deepEqual(seen.allowedTools, ['mcp__slack', 'mcp__notion']);
+});
+
+test('an allowedMcpServers name with characters the CLI normalises still gets a matching allow entry', async () => {
+  const db = testDb();
+  const repo = createRepo(db, { name: 'vesper', path: testRepoDir() });
+  const task = createTask(db, {
+    name: 'nightly',
+    prompt: 'do the thing',
+    repoId: repo.id,
+    schedule: '0 2 * * *',
+    allowedMcpServers: ['claude.ai Supercast'],
+  });
+
+  let seen: { allowedTools?: string[] } = {};
+  const capture: QueryFn = ((args: { prompt: unknown; options: Options }) => {
+    seen = { allowedTools: args.options.allowedTools };
+    async function* gen() {
+      yield init;
+    }
+    return gen();
+  }) as unknown as QueryFn;
+
+  const listServers = async (): Promise<McpServerInfo[]> => [
+    { name: 'claude.ai Supercast', status: 'connected', tools: ['post'] },
+  ];
+
+  const { done } = runTask(db, task.id, 'manual', capture, undefined, listServers);
+  await done;
+
+  assert.deepEqual(seen.allowedTools, ['mcp__claude_ai_Supercast__post']);
 });
