@@ -16,6 +16,8 @@ export interface ApiTask {
   schedule: string;
   /** An IANA zone name, e.g. `America/Chicago`. Null to run `schedule` in the machine's own local time. */
   timezone: string | null;
+  /** The next instant `schedule` is due, as epoch ms. Computed fresh on every read, not stored. */
+  nextRunTime: number | null;
   /** Null means the CLI's own default — auto mode, no model pinned. */
   model: TaskModel | null;
   effort: EffortLevel | null;
