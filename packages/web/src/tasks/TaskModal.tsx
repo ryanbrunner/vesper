@@ -205,7 +205,10 @@ export function TaskModal({ task, onClose }: { task: ApiTask | null; onClose: ()
               should act through on its own.
             </p>
             {!repoId && <p className="text-xs text-muted">Choose a repo to see its MCP servers.</p>}
-            {repoId && mcpOptions.length === 0 && <p className="text-xs text-muted">No MCP servers found for this repo.</p>}
+            {repoId && repoMcpServers.isLoading && <p className="text-xs text-muted">Looking for this repo's MCP servers…</p>}
+            {repoId && !repoMcpServers.isLoading && mcpOptions.length === 0 && (
+              <p className="text-xs text-muted">No MCP servers found for this repo.</p>
+            )}
             {mcpOptions.map((o) => (
               <label key={o.name} className="flex items-center gap-2 text-sm text-text">
                 <input
