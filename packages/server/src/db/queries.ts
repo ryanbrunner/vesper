@@ -3,6 +3,7 @@ import { and, asc, desc, eq, ne } from 'drizzle-orm';
 import {
   isValidCron,
   isValidTimeZone,
+  nextRunAt,
   type ApiRepo,
   type ApiRun,
   type ApiRunDetail,
@@ -83,8 +84,15 @@ const taskColumns = {
   updatedAt: task.updatedAt,
 };
 
-function toApiTask(row: { createdAt: Date; updatedAt: Date } & Omit<ApiTask, 'createdAt' | 'updatedAt'>): ApiTask {
-  return { ...row, createdAt: row.createdAt.getTime(), updatedAt: row.updatedAt.getTime() };
+function toApiTask(
+  row: { createdAt: Date; updatedAt: Date } & Omit<ApiTask, 'createdAt' | 'updatedAt' | 'nextRunTime'>,
+): ApiTask {
+  return {
+    ...row,
+    createdAt: row.createdAt.getTime(),
+    updatedAt: row.updatedAt.getTime(),
+    nextRunTime: nextRunAt(row.schedule, new Date(), row.timezone)?.getTime() ?? null,
+  };
 }
 
 export function listTasks(db: Db): ApiTask[] {

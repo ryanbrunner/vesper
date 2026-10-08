@@ -58,3 +58,19 @@ export function isValidTimeZone(tz: string): boolean {
 export function lastDueAt(expression: string, now: Date, tz?: string | null): Date {
   return CronExpressionParser.parse(expression, { currentDate: now, tz: tz ?? undefined }).prev().toDate();
 }
+
+/**
+ * The next instant this schedule is due after `now` — the time shown next to
+ * a task's plain-language schedule. Null for anything that doesn't parse, so
+ * a row with a stale or hand-edited expression doesn't blow up the list it's
+ * shown in. `tz` is the machine's own local zone when omitted or null, same
+ * as `cron-parser` itself defaults.
+ */
+export function nextRunAt(expression: string, now: Date, tz?: string | null): Date | null {
+  if (!isValidCron(expression)) return null;
+  try {
+    return CronExpressionParser.parse(expression, { currentDate: now, tz: tz ?? undefined }).next().toDate();
+  } catch {
+    return null;
+  }
+}
