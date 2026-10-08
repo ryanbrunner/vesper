@@ -4,7 +4,7 @@ import { describeCron, type ApiTask } from '@vesper/shared';
 import { api } from '../lib/api.js';
 import { findModel } from '../lib/models.js';
 import { RunHistoryStrip } from './RunHistoryStrip.js';
-import { STATUS_COLOR } from './runFormat.js';
+import { formatDuration, STATUS_COLOR, truncate } from './runFormat.js';
 
 /**
  * One row per task, in the mockup's resting-state shape: name, schedule as
@@ -105,8 +105,9 @@ export function TaskList({
 
 /**
  * Polled while a run is in flight, so the badge clears on its own once one
- * finishes. A failed run gets its error message alongside the status, in
- * red, so a failing task stands out without opening its history.
+ * finishes. A finished run's duration sits next to the status, and a
+ * succeeded or failed run gets a short preview of its output or error
+ * alongside it, so a failing task stands out without opening its history.
  */
 function LatestRun({ taskId }: { taskId: string }) {
   const latest = useQuery({
@@ -118,7 +119,9 @@ function LatestRun({ taskId }: { taskId: string }) {
   return (
     <p className={`truncate font-mono text-xs ${STATUS_COLOR[latest.data.status]}`}>
       {latest.data.status}
-      {latest.data.status === 'failed' && latest.data.errorMessage && `: ${latest.data.errorMessage}`}
+      {latest.data.finishedAt && ` · ${formatDuration(latest.data)}`}
+      {latest.data.status === 'succeeded' && latest.data.resultText && `: ${truncate(latest.data.resultText, 100)}`}
+      {latest.data.status === 'failed' && latest.data.errorMessage && `: ${truncate(latest.data.errorMessage, 100)}`}
     </p>
   );
 }
