@@ -66,13 +66,32 @@ export interface IntegrationUsage {
   tokens: number;
 }
 
-/** A readable fallback label for an MCP server slug the panel doesn't already know a name for. */
-function titleCase(slug: string): string {
-  return slug
-    .split(/[_-]/)
+/**
+ * A readable fallback label for an MCP server name/slug nothing already has a
+ * name for — used both for a tool-usage bucket's slug and, by the MCP server
+ * picker, for a server's own configured name.
+ */
+export function titleCase(name: string): string {
+  return name
+    .split(/[_\s-]/)
     .filter(Boolean)
     .map((word) => word[0]!.toUpperCase() + word.slice(1))
     .join(' ');
+}
+
+/**
+ * The CLI's own normalisation of a configured server's name into the slug it
+ * uses inside an `mcp__<slug>__<tool>` tool name: every character that isn't
+ * a letter, digit, hyphen or underscore becomes `_`, so `claude.ai Supercast`
+ * yields `claude_ai_Supercast` — confirmed against a live session, which
+ * also confirmed a hyphen already in a server name (`vesper-probe`) is left
+ * alone, not turned into `_`. Used to build the `mcp__<slug>` wildcard and
+ * the exact `mcp__<slug>__<tool>` allow entries for a server a task picked
+ * to pre-approve — the server is stored and shown by its own configured
+ * name, never by this slug.
+ */
+export function mcpServerSlug(serverName: string): string {
+  return serverName.replace(/[^a-zA-Z0-9_-]/g, '_');
 }
 
 /**

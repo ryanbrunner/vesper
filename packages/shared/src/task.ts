@@ -19,6 +19,14 @@ export interface ApiTask {
   /** Null means the CLI's own default — auto mode, no model pinned. */
   model: TaskModel | null;
   effort: EffortLevel | null;
+  /**
+   * MCP servers whose tool calls run unattended instead of being denied —
+   * see runs/claude.ts. Null means none pre-approved, the behaviour every
+   * task had before this existed; `[]` means the same thing but was set
+   * explicitly. Server names here are whatever the repo's own MCP config
+   * calls them, not a closed list the way `model` is.
+   */
+  allowedMcpServers: string[] | null;
   enabled: boolean;
   createdAt: number;
   updatedAt: number;
@@ -32,6 +40,7 @@ export const CreateTaskBody = z.object({
   timezone: z.string().optional(),
   model: z.enum(TASK_MODELS).nullable().optional(),
   effort: z.enum(EFFORT_LEVELS).nullable().optional(),
+  allowedMcpServers: z.array(z.string()).nullable().optional(),
 });
 export type CreateTaskBody = z.infer<typeof CreateTaskBody>;
 
@@ -43,5 +52,6 @@ export const UpdateTaskBody = z.object({
   timezone: z.string().optional(),
   model: z.enum(TASK_MODELS).nullable().optional(),
   effort: z.enum(EFFORT_LEVELS).nullable().optional(),
+  allowedMcpServers: z.array(z.string()).nullable().optional(),
 });
 export type UpdateTaskBody = z.infer<typeof UpdateTaskBody>;

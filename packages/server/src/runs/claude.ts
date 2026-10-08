@@ -1,8 +1,9 @@
 import { query as sdkQuery, type Options, type SDKMessage, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import type { ApiRun, EffortLevel, RunTrigger } from '@vesper/shared';
+import { mcpServerSlug, type ApiRun, type EffortLevel, type RunTrigger } from '@vesper/shared';
 import type { Db } from '../db/client.js';
 import { getLatestRun, getTaskWithRepo, insertRun, setRunStatus } from '../db/queries.js';
 import { capabilitiesFor } from './models.js';
+import { listMcpServers, type McpServerInfo } from './mcpServers.js';
 import { decideToolUse } from './permissions.js';
 import { runRegistry } from './registry.js';
 
@@ -64,6 +65,29 @@ export async function fitToModel(
   };
 }
 
+/**
+ * `options.allowedTools` entries for every server a task opted into, so
+ * those calls run unattended instead of reaching the always-deny
+ * `canUseTool` callback. Exact `mcp__<server>__<tool>` names are built from
+ * each server's own discovered tool list; a server that isn't `connected`
+ * with a non-empty tool list (still `pending`, or `failed`/`needs-auth`, or
+ * discovery itself failed) falls back to the bare `mcp__<server>` wildcard
+ * instead of silently losing its pre-approval — a safe degrade either way,
+ * since a wildcard that doesn't match there just goes back to being denied,
+ * same as today.
+ */
+function allowedToolsFor(serverNames: string[], discovered: McpServerInfo[]): string[] {
+  const byName = new Map(discovered.map((s) => [s.name, s]));
+  return serverNames.flatMap((name) => {
+    const slug = mcpServerSlug(name);
+    const found = byName.get(name);
+    if (found?.status === 'connected' && found.tools.length > 0) {
+      return found.tools.map((tool) => `mcp__${slug}__${tool}`);
+    }
+    return [`mcp__${slug}`];
+  });
+}
+
 /** The SDK takes an async iterable for its prompt even for a single turn. */
 async function* singleMessage(text: string): AsyncIterable<SDKUserMessage> {
   yield { type: 'user', session_id: '', parent_tool_use_id: null, message: { role: 'user', content: text } };
@@ -104,6 +128,14 @@ export type QueryFn = typeof sdkQuery;
  * `fitToModel`) starts in its own default mode instead, which escalates far
  * more to that same always-deny callback — so that task can do markedly less
  * unattended than one left on the CLI's default or an auto-mode-capable model.
+ *
+ * One deliberate exception to all of that: a task with `allowedMcpServers`
+ * set gets `options.allowedTools` built from those servers' own discovered
+ * tools (see `allowedToolsFor`), so every tool call to a pre-approved
+ * server's tools runs unattended too, never reaching `canUseTool` at all.
+ * That is a real widening of unattended capability for exactly the servers a
+ * task opts into — a Slack post goes through, not just a Slack read — chosen
+ * per task by whoever configured it, not something auto mode itself would do.
  */
 export function runTask(
   db: Db,
@@ -114,6 +146,10 @@ export function runTask(
   // the real CLI handshake `capabilitiesFor`'s default would otherwise make;
   // nothing in production passes a fifth argument.
   lookup: typeof capabilitiesFor = capabilitiesFor,
+  // Only so a test can hand this a stubbed MCP discovery instead of the real
+  // CLI handshake `listMcpServers`'s default would otherwise make; nothing in
+  // production passes a sixth argument.
+  listServers: typeof listMcpServers = listMcpServers,
 ): RunTaskHandle {
   const task = getTaskWithRepo(db, taskId);
   if (!task) throw new TaskNotFoundError(`no task with id ${taskId}`);
@@ -164,6 +200,13 @@ export function runTask(
       // options.permissionMode stays unset rather than sending a mode it does
       // not take.
       if (fitted.autoMode) options.permissionMode = PERMISSION_MODE;
+
+      // Left unset for a task that never opted any server in — exactly as
+      // every task behaved before this existed.
+      if (task.allowedMcpServers && task.allowedMcpServers.length > 0) {
+        const discovered = await listServers(task.repo.path);
+        options.allowedTools = allowedToolsFor(task.allowedMcpServers, discovered);
+      }
 
       for await (const message of query({ prompt: singleMessage(task.prompt), options })) {
         if (message.type === 'assistant' || message.type === 'user') {

@@ -6,6 +6,7 @@ import type {
   ApiToolUsage,
   CreateRepoBody,
   CreateTaskBody,
+  McpServersResponse,
   ModelsResponse,
   UpdateTaskBody,
 } from '@vesper/shared';
@@ -34,6 +35,7 @@ export const api = {
   repos: () => fetch('/api/repos').then(json<ApiRepo[]>),
   createRepo: (body: CreateRepoBody) => post('/api/repos', body).then(json<ApiRepo>),
   deleteRepo: (id: string) => del(`/api/repos/${id}`).then(json<{ ok: true }>),
+  repoMcpServers: (id: string) => fetch(`/api/repos/${id}/mcp-servers`).then(json<McpServersResponse>),
 
   // --- tasks ---
   tasks: () => fetch('/api/tasks').then(json<ApiTask[]>),

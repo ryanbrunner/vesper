@@ -1,4 +1,4 @@
-import { EFFORT_LEVELS, TASK_MODELS, type ApiModel, type EffortLevel } from '@vesper/shared';
+import { EFFORT_LEVELS, TASK_MODELS, type ApiMcpServer, type ApiModel, type EffortLevel } from '@vesper/shared';
 
 /**
  * The model the CLI listed under this alias or full id, if it did. The same
@@ -39,4 +39,28 @@ export function modelOptions(models: ApiModel[]): Array<{ value: string; label: 
  */
 export function keepEffort(models: ApiModel[], model: string | null, effort: EffortLevel | null): EffortLevel | null {
   return effort && effortLevelsFor(models, model).includes(effort) ? effort : null;
+}
+
+/** One checkbox the MCP server picker shows; `status` is null for a server nothing discovered reports anything about. */
+export interface McpServerOption {
+  name: string;
+  label: string;
+  status: ApiMcpServer['status'] | null;
+}
+
+/**
+ * The checkboxes to show for a task's MCP server picker: every server the
+ * repo currently discovers, plus any server already in the task's saved
+ * `allowedMcpServers` that discovery didn't return — carried through rather
+ * than silently dropped, the same "unlisted value kept as its own option"
+ * idea `modelOptions`/`capabilitiesFor` already apply to a model the CLI
+ * didn't list.
+ */
+export function mcpServerOptions(discovered: ApiMcpServer[], saved: string[] | null): McpServerOption[] {
+  const known = new Set(discovered.map((s) => s.name));
+  const unlisted = (saved ?? []).filter((name) => !known.has(name));
+  return [
+    ...discovered.map((s) => ({ name: s.name, label: s.label, status: s.status })),
+    ...unlisted.map((name) => ({ name, label: name, status: null })),
+  ];
 }
