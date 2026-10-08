@@ -13,7 +13,7 @@ import {
   setTaskEnabled,
   updateTask,
 } from '../db/queries.js';
-import { TaskNotFoundError, runTask } from '../runs/claude.js';
+import { RunAlreadyInProgressError, TaskNotFoundError, runTask } from '../runs/claude.js';
 
 export function taskRoutes(db: Db) {
   const routes = new Hono();
@@ -86,6 +86,7 @@ export function taskRoutes(db: Db) {
       return c.json(run, 202);
     } catch (e) {
       if (e instanceof TaskNotFoundError) return c.json({ error: 'not found' }, 404);
+      if (e instanceof RunAlreadyInProgressError) return c.json({ error: 'a run is already in progress' }, 409);
       throw e;
     }
   });
