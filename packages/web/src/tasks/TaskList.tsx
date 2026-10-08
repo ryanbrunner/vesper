@@ -65,7 +65,10 @@ export function TaskList({
                 </span>
               )}
             </div>
-            <p className="font-mono text-xs text-muted">{describeCron(task.schedule) ?? task.schedule}</p>
+            <p className="font-mono text-xs text-muted">
+              {describeCron(task.schedule) ?? task.schedule}
+              {task.nextRunTime != null && ` · next ${new Date(task.nextRunTime).toLocaleString()}`}
+            </p>
             <LatestRun taskId={task.id} />
             <RunHistoryStrip taskId={task.id} />
           </div>
