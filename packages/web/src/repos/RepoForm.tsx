@@ -44,7 +44,7 @@ export function RepoForm({ onCreated }: { onCreated: (repo: ApiRepo) => void }) 
         type="button"
         disabled={create.isPending || !name || !path}
         onClick={() => create.mutate()}
-        className="self-start rounded bg-enabled-fill px-3 py-1 text-sm text-text hover:brightness-110 disabled:opacity-50"
+        className="self-start btn-primary"
       >
         Add repo
       </button>

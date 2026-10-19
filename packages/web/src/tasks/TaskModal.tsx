@@ -12,6 +12,21 @@ import { api } from '../lib/api.js';
 import { effortLevelsFor, keepEffort, mcpServerOptions, modelOptions } from '../lib/models.js';
 import { RepoForm } from '../repos/RepoForm.js';
 
+/** Common intervals offered in the schedule dropdown; anything else is "Custom…". */
+const SCHEDULE_PRESETS: { label: string; cron: string }[] = [
+  { label: 'Every minute', cron: '* * * * *' },
+  { label: 'Every 5 minutes', cron: '*/5 * * * *' },
+  { label: 'Every 15 minutes', cron: '*/15 * * * *' },
+  { label: 'Every 30 minutes', cron: '*/30 * * * *' },
+  { label: 'Every hour', cron: '0 * * * *' },
+  { label: 'Every 6 hours', cron: '0 */6 * * *' },
+  { label: 'Every day at 9:00 AM', cron: '0 9 * * *' },
+  { label: 'Weekdays at 9:00 AM', cron: '0 9 * * 1-5' },
+  { label: 'Every Monday at 9:00 AM', cron: '0 9 * * 1' },
+  { label: 'First of the month at 9:00 AM', cron: '0 9 1 * *' },
+];
+const CUSTOM = 'custom';
+
 /** Create when `task` is null, edit when it's a task. Same fields either way. */
 export function TaskModal({ task, onClose }: { task: ApiTask | null; onClose: () => void }) {
   const qc = useQueryClient();
@@ -22,6 +37,11 @@ export function TaskModal({ task, onClose }: { task: ApiTask | null; onClose: ()
   const [prompt, setPrompt] = useState(task?.prompt ?? '');
   const [repoId, setRepoId] = useState(task?.repoId ?? '');
   const [schedule, setSchedule] = useState(task?.schedule ?? '');
+  // Custom when editing a task whose schedule is not one of the presets. Stays
+  // custom once chosen, even if typing happens to land on a preset's cron.
+  const [customSchedule, setCustomSchedule] = useState(
+    !!task?.schedule && !SCHEDULE_PRESETS.some((p) => p.cron === task.schedule),
+  );
   const [timezone, setTimezone] = useState(task?.timezone ?? '');
   const [model, setModel] = useState(task?.model ?? '');
   const [effort, setEffort] = useState(task?.effort ?? '');
@@ -137,18 +157,53 @@ export function TaskModal({ task, onClose }: { task: ApiTask | null; onClose: ()
             )}
           </label>
 
-          <label className="flex flex-col gap-1">
-            <span className="font-mono text-xs uppercase tracking-wide text-muted">Schedule (cron)</span>
-            <input
-              className="rounded border border-edge bg-ink px-2 py-1 font-mono text-sm text-text"
-              placeholder="0 9 * * 1-5"
-              value={schedule}
-              onChange={(e) => setSchedule(e.target.value)}
+          <div className="flex flex-col gap-1">
+            <label htmlFor="schedule-preset" className="font-mono text-xs uppercase tracking-wide text-muted">
+              Schedule
+            </label>
+            <select
+              id="schedule-preset"
+              className="rounded border border-edge bg-ink px-2 py-1 text-sm text-text"
+              value={customSchedule ? CUSTOM : schedule}
+              onChange={(e) => {
+                if (e.target.value === CUSTOM) {
+                  setCustomSchedule(true);
+                } else {
+                  setCustomSchedule(false);
+                  setSchedule(e.target.value);
+                }
+              }}
               required
-            />
+            >
+              <option value="" disabled>
+                Choose a schedule…
+              </option>
+              {SCHEDULE_PRESETS.map((p) => (
+                <option key={p.cron} value={p.cron}>
+                  {p.label}
+                </option>
+              ))}
+              <option value={CUSTOM}>Custom…</option>
+            </select>
+            {customSchedule && (
+              <input
+                className="rounded border border-edge bg-ink px-2 py-1 font-mono text-sm text-text"
+                placeholder="0 9 * * 1-5"
+                aria-label="Cron expression"
+                value={schedule}
+                onChange={(e) => setSchedule(e.target.value)}
+                autoFocus
+                required
+              />
+            )}
             {!scheduleValid && <p className="text-xs text-red-400">Not a valid cron expression.</p>}
-            {preview && <p className="font-mono text-xs text-muted">{preview}</p>}
-          </label>
+            {preview && (
+              <p className="font-mono text-xs text-muted">
+                {preview}
+                {!customSchedule && <span className="opacity-60"> · {schedule}</span>}
+              </p>
+            )}
+          </div>
 
           <label className="flex flex-col gap-1">
             <span className="font-mono text-xs uppercase tracking-wide text-muted">Time zone</span>
@@ -231,7 +286,7 @@ export function TaskModal({ task, onClose }: { task: ApiTask | null; onClose: ()
             <button
               type="submit"
               disabled={save.isPending || !scheduleValid || !timezoneValid || !repoId}
-              className="rounded bg-enabled-fill px-3 py-1 text-sm text-text hover:brightness-110 disabled:opacity-50"
+              className="btn-primary"
             >
               {task ? 'Save' : 'Create task'}
             </button>

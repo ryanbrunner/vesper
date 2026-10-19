@@ -3,7 +3,9 @@ import { useQuery } from '@tanstack/react-query';
 import type { ApiTask } from '@vesper/shared';
 import { api } from '../lib/api.js';
 import { RunDetail } from './RunDetail.js';
-import { formatCost, formatDuration, STATUS_COLOR } from './runFormat.js';
+import { formatCost, formatDuration, STATUS_COLOR, STATUS_LABEL } from './runFormat.js';
+import { StatusLight } from './StatusLight.js';
+import { CloseIcon } from '../ui/Glyph.js';
 
 /**
  * A task's run history, newest first, as a modal over the task list.
@@ -13,11 +15,11 @@ import { formatCost, formatDuration, STATUS_COLOR } from './runFormat.js';
 export function RunHistory({ task, onClose }: { task: ApiTask; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-10 flex items-center justify-center bg-black/60 px-4">
-      <div className="flex max-h-[80vh] w-full max-w-lg flex-col rounded-lg border border-edge bg-panel p-5 shadow-xl">
+      <div className="flex max-h-[80vh] w-full max-w-2xl flex-col rounded-lg border border-edge bg-panel p-5 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-text">{task.name} — runs</h2>
-          <button onClick={onClose} className="text-sm text-muted hover:text-text">
-            Close
+          <h2 className="truncate text-lg font-semibold tracking-[-0.01em] text-text">{task.name} <span className="font-normal text-muted">· runs</span></h2>
+          <button onClick={onClose} className="icon-btn" aria-label="Close" title="Close">
+            <CloseIcon />
           </button>
         </div>
         <RunList taskId={task.id} />
@@ -54,18 +56,17 @@ export function RunList({ taskId }: { taskId: string }) {
           <li key={run.id}>
             <button
               onClick={() => setSelectedRunId(run.id)}
-              className="flex w-full items-center justify-between gap-3 rounded px-2 py-1.5 text-left hover:bg-panel-hover"
+              className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-left transition-colors hover:bg-panel-hover"
             >
-              <div className="min-w-0">
-                <p className="font-mono text-xs uppercase tracking-wide text-muted">{run.trigger}</p>
+              <StatusLight status={run.status} size={24} />
+              <div className="min-w-0 flex-1">
                 <p className="truncate text-sm text-text">{new Date(run.startedAt).toLocaleString()}</p>
+                <p className="font-mono text-xs text-muted">{run.trigger}</p>
               </div>
-              <div className="flex shrink-0 items-center gap-3">
-                <span className="font-mono text-xs text-muted">{formatDuration(run)}</span>
-                <span className="font-mono text-xs text-muted">{formatCost(run.totalCostUsd)}</span>
-                <span className={`font-mono text-xs uppercase tracking-wide ${STATUS_COLOR[run.status]}`}>
-                  {run.status}
-                </span>
+              <div className="tnum flex shrink-0 items-center gap-4 font-mono text-xs text-muted">
+                <span>{formatDuration(run)}</span>
+                <span className="w-16 text-right">{formatCost(run.totalCostUsd)}</span>
+                <span className={`w-20 text-right font-medium ${STATUS_COLOR[run.status]}`}>{STATUS_LABEL[run.status]}</span>
               </div>
             </button>
           </li>

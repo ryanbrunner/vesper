@@ -4,6 +4,7 @@ import { Route, Routes } from 'react-router-dom';
 import type { ApiTask } from '@vesper/shared';
 import { api } from './lib/api.js';
 import { RepoManager } from './repos/RepoForm.js';
+import { FolderIcon, Glyph, PlusIcon } from './ui/Glyph.js';
 import { RunDetail } from './tasks/RunDetail.js';
 import { RunHistory } from './tasks/RunHistory.js';
 import { TaskDetail } from './tasks/TaskDetail.js';
@@ -39,22 +40,25 @@ function TaskListPage() {
   const [openRunId, setOpenRunId] = useState<string | null>(runIdOnLoad);
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8">
-      <header className="mb-6 flex items-center justify-between">
-        <div className="flex items-baseline gap-3">
-          <h1 className="text-xl font-semibold text-text">Vesper</h1>
-          <span className="font-mono text-xs uppercase tracking-wide text-muted">
-            Scheduled tasks {tasks.data?.length ?? 0}
+    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
+      <header className="mb-6 flex items-center justify-between border-b border-edge pb-5">
+        <div className="flex items-center gap-3">
+          <Glyph />
+          <h1 className="text-lg font-semibold tracking-[-0.01em] text-text">Vesper</h1>
+          <span className="tnum rounded-full border border-edge px-2 py-0.5 font-mono text-xs text-muted">
+            {tasks.data?.length ?? 0} {tasks.data?.length === 1 ? 'task' : 'tasks'}
           </span>
         </div>
-        <div className="flex items-center gap-3">
-          <button className="text-sm text-muted hover:text-text" onClick={() => setManagingRepos(true)}>
+        <div className="flex items-center gap-2">
+          <button
+            className="flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm text-muted transition-colors hover:bg-white/[0.06] hover:text-text"
+            onClick={() => setManagingRepos(true)}
+          >
+            <FolderIcon />
             Repos
           </button>
-          <button
-            className="rounded bg-enabled-fill px-3 py-1.5 text-sm text-text hover:brightness-110"
-            onClick={() => setEditing(null)}
-          >
+          <button className="btn-primary" onClick={() => setEditing(null)}>
+            <PlusIcon />
             New task
           </button>
         </div>

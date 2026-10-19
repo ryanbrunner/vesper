@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { asBlocks, blockText, summarizeToolUsage, type TranscriptBlock, type TranscriptMessageShape } from '@vesper/shared';
 import { api } from '../lib/api.js';
-import { formatCost, formatDuration, STATUS_COLOR } from './runFormat.js';
+import { CloseIcon } from '../ui/Glyph.js';
+import { formatCost, formatDuration, STATUS_COLOR, STATUS_LABEL, STATUS_MODAL_GLOW } from './runFormat.js';
+import { Rail, StatusLight } from './StatusLight.js';
 import { ToolUsagePanel } from './ToolUsage.js';
 
 /**
@@ -73,26 +75,32 @@ export function RunDetail({ runId, onClose }: { runId: string; onClose: () => vo
 
   return (
     <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/60 px-4">
-      <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-lg border border-edge bg-panel p-5 shadow-xl">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className={`font-mono text-sm uppercase tracking-wide ${run.data ? STATUS_COLOR[run.data.status] : 'text-text'}`}>
-            {run.data?.status ?? 'Loading…'}
-          </h2>
-          <button onClick={onClose} className="text-sm text-muted hover:text-text">
-            Close
+      <div
+        className={`relative flex max-h-[85vh] w-full max-w-3xl flex-col rounded-lg border p-5 ${
+          run.data ? STATUS_MODAL_GLOW[run.data.status] : 'border-edge bg-panel shadow-xl'
+        }`}
+      >
+        <div className="mb-4 flex items-center gap-3">
+          {run.data && <StatusLight status={run.data.status} size={28} />}
+          <div className="min-w-0 flex-1">
+            <h2 className={`font-medium ${run.data ? STATUS_COLOR[run.data.status] : 'text-text'}`}>
+              {run.data ? STATUS_LABEL[run.data.status] : 'Loading…'}
+            </h2>
+            {run.data && (
+              <p className="tnum truncate font-mono text-xs text-muted">
+                {run.data.trigger} · started {new Date(run.data.startedAt).toLocaleString()} ·{' '}
+                {formatDuration(run.data)} · {formatCost(run.data.totalCostUsd)}
+              </p>
+            )}
+          </div>
+          <button onClick={onClose} className="icon-btn" aria-label="Close" title="Close">
+            <CloseIcon />
           </button>
         </div>
 
-        {run.data && (
-          <p className="mb-3 font-mono text-xs text-muted">
-            {run.data.trigger} · started {new Date(run.data.startedAt).toLocaleString()} · {formatDuration(run.data)} ·{' '}
-            {formatCost(run.data.totalCostUsd)}
-          </p>
-        )}
-
         <div className="flex-1 overflow-y-auto">
           {run.data?.errorMessage && (
-            <p className="mb-3 whitespace-pre-wrap rounded border border-red-900 bg-red-950/40 p-2 text-sm text-red-400">
+            <p className="mb-3 whitespace-pre-wrap rounded-md border border-activity-error-border bg-activity-error-fill p-3 text-sm text-activity-error-mark">
               {run.data.errorMessage}
             </p>
           )}
@@ -123,6 +131,7 @@ export function RunDetail({ runId, onClose }: { runId: string; onClose: () => vo
             )}
           </div>
         </div>
+        {run.data?.status === 'running' && <Rail />}
       </div>
     </div>
   );

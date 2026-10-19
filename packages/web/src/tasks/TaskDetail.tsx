@@ -3,7 +3,9 @@ import { Link, useParams } from 'react-router-dom';
 import { describeCron, type ApiTask } from '@vesper/shared';
 import { api } from '../lib/api.js';
 import { RunList } from './RunHistory.js';
-import { STATUS_COLOR } from './runFormat.js';
+import { ArrowLeftIcon, BranchIcon, ClockIcon, PauseIcon, PlayIcon } from '../ui/Glyph.js';
+import { STATUS_COLOR, STATUS_GLOW, STATUS_LABEL } from './runFormat.js';
+import { Rail, StatusLight } from './StatusLight.js';
 import { ToolUsagePanel } from './ToolUsagePanel.js';
 
 const TABS = ['runs', 'tools', 'schedule'] as const;
@@ -25,10 +27,10 @@ export function TaskDetail() {
 
   const task = useQuery({ queryKey: ['task', id], queryFn: () => api.task(id) });
 
-  if (task.isLoading) return <p className="mx-auto max-w-3xl px-4 py-8 text-sm text-muted">Loading…</p>;
+  if (task.isLoading) return <p className="mx-auto max-w-5xl px-4 py-8 sm:px-6 text-sm text-muted">Loading…</p>;
   if (task.isError || !task.data) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-8">
+      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
         <p className="text-sm text-red-400">{task.error?.message ?? 'Task not found.'}</p>
         <Link to="/" className="text-sm text-muted hover:text-text">
           ← Back to tasks
@@ -40,21 +42,24 @@ export function TaskDetail() {
   const t = task.data;
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8">
-      <Link to="/" className="text-sm text-muted hover:text-text">
-        ← Tasks
+    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
+      <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-text">
+        <ArrowLeftIcon />
+        Tasks
       </Link>
 
-      <header className="mt-2 mb-6 flex flex-wrap items-center gap-3">
-        <h1 className="text-xl font-semibold text-text">{t.name}</h1>
-        <span className="rounded-full border border-edge px-2 py-0.5 font-mono text-xs text-muted">{t.repoName}</span>
-        <span
-          className={`rounded-full px-2 py-0.5 font-mono text-xs uppercase tracking-wide ${
-            t.enabled ? 'bg-enabled-fill text-enabled-mark' : 'bg-paused-fill text-paused-mark'
-          }`}
-        >
-          {t.enabled ? 'Enabled' : 'Paused'}
+      <header className="mt-3 mb-6 flex flex-wrap items-center gap-x-3 gap-y-2">
+        <h1 className="text-xl font-semibold tracking-[-0.01em] text-text">{t.name}</h1>
+        <span className="flex items-center gap-1.5 rounded-full border border-edge px-2 py-0.5 font-mono text-xs text-muted">
+          <BranchIcon />
+          {t.repoName}
         </span>
+        {!t.enabled && (
+          <span className="flex items-center gap-1.5 rounded-full border border-edge px-2 py-0.5 font-mono text-xs text-muted">
+            <PauseIcon />
+            Paused
+          </span>
+        )}
       </header>
 
       <nav className="mb-5 flex gap-4 border-b border-edge">
@@ -102,29 +107,34 @@ function RunsTab({ taskId }: { taskId: string }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-3">
-        {latest.data && (
-          <span className={`font-mono text-xs uppercase tracking-wide ${STATUS_COLOR[latest.data.status]}`}>
-            Latest: {latest.data.status}
-          </span>
-        )}
+      <div
+        className={`relative flex items-center gap-4 rounded-lg border px-4 py-3.5 ${
+          latest.data ? STATUS_GLOW[latest.data.status] : 'card-idle'
+        }`}
+      >
+        <StatusLight status={latest.data?.status ?? null} />
+        <div className="min-w-0 flex-1">
+          <p className="font-mono text-xs uppercase tracking-wide text-muted">Latest run</p>
+          <p className={`font-medium ${latest.data ? STATUS_COLOR[latest.data.status] : 'text-muted'}`}>
+            {latest.data ? STATUS_LABEL[latest.data.status] : 'Never run'}
+          </p>
+        </div>
         {running ? (
           <button
-            className="text-sm text-muted hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex h-8 items-center gap-1.5 rounded-md border border-activity-error-border bg-activity-error-fill px-3 text-sm text-activity-error-mark transition-colors hover:brightness-125 disabled:cursor-not-allowed disabled:opacity-50"
             disabled={stop.isPending}
             onClick={() => latest.data && stop.mutate(latest.data.id)}
           >
+            <span className="h-2 w-2 rounded-[2px] bg-current" />
             Stop
           </button>
         ) : (
-          <button
-            className="text-sm text-muted hover:text-text disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={retry.isPending}
-            onClick={() => retry.mutate()}
-          >
-            Retry
+          <button className="btn-primary" disabled={retry.isPending} onClick={() => retry.mutate()}>
+            <PlayIcon />
+            {latest.data ? 'Retry' : 'Run now'}
           </button>
         )}
+        {running && <Rail />}
       </div>
       <RunList taskId={taskId} />
     </div>
