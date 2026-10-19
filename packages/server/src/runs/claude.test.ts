@@ -490,3 +490,37 @@ test('an allowedMcpServers name with a hyphen keeps it, since a live session sho
 
   assert.deepEqual(seen.allowedTools, ['mcp__vesper-probe__echo']);
 });
+
+test('a run Claude reports as failed is recorded as failed, with its reason and without the marker line', async () => {
+  const { db, task } = setUp();
+  const result = {
+    type: 'result',
+    subtype: 'success',
+    result: 'I could not reach Linear.\nVESPER_OUTCOME: FAILURE: the linear tool call was denied',
+  } as unknown as SDKMessage;
+  const { done } = runTask(db, task.id, 'manual', scripted([init, result]));
+  await done;
+
+  const latest = getLatestRun(db, task.id);
+  assert.equal(latest?.status, 'failed');
+  assert.equal(latest?.errorMessage, 'the linear tool call was denied');
+  assert.equal(latest?.resultText, 'I could not reach Linear.');
+});
+
+test('a success result flagged is_error is a failure', async () => {
+  const { db, task } = setUp();
+  const result = { type: 'result', subtype: 'success', is_error: true, result: 'API Error: 529' } as unknown as SDKMessage;
+  const { done } = runTask(db, task.id, 'manual', scripted([init, result]));
+  await done;
+  assert.equal(getLatestRun(db, task.id)?.status, 'failed');
+  assert.equal(getLatestRun(db, task.id)?.errorMessage, 'API Error: 529');
+});
+
+test('a SUCCESS marker is stripped from the stored result', async () => {
+  const { db, task } = setUp();
+  const result = { type: 'result', subtype: 'success', result: 'done\nVESPER_OUTCOME: SUCCESS' } as unknown as SDKMessage;
+  const { done } = runTask(db, task.id, 'manual', scripted([init, result]));
+  await done;
+  assert.equal(getLatestRun(db, task.id)?.status, 'succeeded');
+  assert.equal(getLatestRun(db, task.id)?.resultText, 'done');
+});

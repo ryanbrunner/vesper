@@ -4,6 +4,7 @@ import type { Db } from '../db/client.js';
 import { getLatestRun, getTaskWithRepo, insertRun, setRunStatus } from '../db/queries.js';
 import { capabilitiesFor } from './models.js';
 import { listMcpServers, type McpServerInfo } from './mcpServers.js';
+import { OUTCOME_PROMPT, parseOutcome } from './outcome.js';
 import { decideToolUse } from './permissions.js';
 import { runRegistry } from './registry.js';
 
@@ -178,6 +179,9 @@ export function runTask(
     cwd: task.repo.path,
     abortController,
     sessionId: crypto.randomUUID(),
+    // Claude's own verdict on the task, read back below: the SDK calls a run
+    // that ended normally a success even when Claude could not do what it was asked.
+    systemPrompt: { type: 'preset', preset: 'claude_code', append: OUTCOME_PROMPT },
     ...(task.model ? { model: task.model } : {}),
     // Nobody is watching to approve anything an auto-mode run escalates, so
     // this answers at once rather than leaving the run parked forever.
@@ -253,7 +257,18 @@ export function runTask(
       finish(db, runId, 'failed', `run ended: ${result.subtype}`, result, transcript);
       return;
     }
-    finish(db, runId, 'succeeded', null, result, transcript);
+    // The session ended normally but reports an error, e.g. the turn ended on an API error.
+    if (result.is_error) {
+      finish(db, runId, 'failed', String(result.result ?? 'run reported an error').slice(0, 500), result, transcript);
+      return;
+    }
+    // Ended normally, but Claude may say it could not do what was asked.
+    const outcome = parseOutcome(result.result ?? '');
+    if (outcome.failure) {
+      finish(db, runId, 'failed', outcome.failure.slice(0, 500), result, transcript, outcome.text);
+      return;
+    }
+    finish(db, runId, 'succeeded', null, result, transcript, outcome.text);
   })();
 
   return { run, done };
@@ -267,12 +282,14 @@ function finish(
   errorMessage: string | null,
   result: Extract<SDKMessage, { type: 'result' }> | null,
   transcript: SDKMessage[],
+  /** Claude's text with its outcome line removed, when that was read. */
+  resultText?: string,
 ): void {
   setRunStatus(db, runId, {
     status,
     errorMessage,
     finishedAt: new Date(),
-    resultText: result && 'result' in result ? result.result : null,
+    resultText: resultText ?? (result && 'result' in result ? result.result : null),
     totalCostUsd: result?.total_cost_usd ?? null,
     usageJson: (result?.usage as Record<string, unknown>) ?? null,
     modelUsageJson: (result?.modelUsage as Record<string, unknown>) ?? null,
